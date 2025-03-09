@@ -20,6 +20,7 @@ Create a `.env`
 ```
 TELEGRAM_BOT_TOKEN=<your_bot_token>
 READECK_BASE_URL=<your_readec_url>
+READECK_CONFIG=<path_to_config.yaml>    # optional.
 ```
 
 run with `uv run bot.py` and voilá, you can chat with your token
