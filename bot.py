@@ -25,6 +25,9 @@ import json
 import requests
 import subprocess
 from pathlib import Path
+
+from io import BytesIO
+
 from dotenv import load_dotenv
 from telegram import Update
 from telegram.constants import ParseMode
@@ -327,6 +330,61 @@ async def fetch_article_markdown(update: Update, bookmark_id: str, token: str):
         await update.message.reply_text("Failed to retrieve the article markdown.")
         logger.error("Failed to retrieve the article markdown.")
 
+
+
+async def epub_command(update: Update, context: CallbackContext) -> None:
+    """Generate an epub of all unread bookmarks, send it, and archive them."""
+    user_id = update.effective_user.id
+    token = USER_TOKEN_MAP.get(str(user_id))
+    if not token:
+        await update.message.reply_text("I don't have your Readeck token. Set it with /token <YOUR_TOKEN> or /register <password>.")
+        return
+
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "content-type": "application/json",
+    }
+    # Define el filtro: bookmarks no archivados.
+    params = {
+        "author": "",
+        "is_archived": "false",
+        "labels": "",
+        "search": "",
+        "site": "",
+        "title": ""
+    }
+
+    # Step 1: unarchive bookmarks
+    list_url = f"{READECK_BASE_URL}/api/bookmarks"
+    list_response = requests.get(list_url, headers={**headers, "accept": "application/json"}, params=params)
+    
+    
+    bookmarks = list_response.json()
+    bookmark_ids = [b.get("id") for b in bookmarks if b.get("id")]
+
+    
+    if not bookmark_ids: 
+        await update.message.reply_text("There is no unread bookmarks. ")
+        return 
+
+    await update.message.reply_text(f"Found {len(bookmark_ids)} unread bookmarks. Downloading epub.")
+    
+
+    epub_url = f"{READECK_BASE_URL}/api/bookmarks/export.epub"
+    epub_response = requests.get(epub_url, headers={"Authorization": f"Bearer {token}", "accept": "application/epub+zip"}, params=params)
+    
+    # Fetch the epub file
+    epub_bytes = BytesIO(epub_response.content)
+    epub_bytes.name = "bookmarks.epub"
+    await update.message.reply_document(document=epub_bytes, filename="bookmarks.epub", caption="Here is your epub file.")
+
+    # archive
+    for bid in bookmark_ids:
+        patch_url = f"{READECK_BASE_URL}/api/bookmarks/{bid}"
+        patch_payload = {"is_archived": True}
+        r = requests.patch(patch_url, headers=headers, json=patch_payload)
+        logger.info(f"Archived {bid} bookmark: {r.status_code}")
+
 def main():
     application = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
 
@@ -335,6 +393,8 @@ def main():
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("register", register_command))
     application.add_handler(CommandHandler("token", token_command))
+    application.add_handler(CommandHandler("epub", epub_command))
+    
     application.add_handler(MessageHandler(filters.COMMAND, dynamic_md_handler))
     # Non-command messages (likely bookmarks)
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
