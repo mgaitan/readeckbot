@@ -15,7 +15,8 @@ Features:
 #   "requests",
 #   "python-telegram-bot",
 #   "rich",
-#   "python-dotenv"
+#   "python-dotenv",
+#   "telegramify-markdown"
 # ]
 # ///
 
@@ -30,9 +31,9 @@ from io import BytesIO
 
 from dotenv import load_dotenv
 from telegram import Update
-from telegram.constants import ParseMode
 from telegram.ext import CommandHandler, MessageHandler, filters, CallbackContext, ApplicationBuilder
 from rich.logging import RichHandler
+from telegramify_markdown import markdownify
 import logging
 
 # Configure rich logging
@@ -262,7 +263,7 @@ async def save_bookmark(update: Update, url: str, title: str, labels: list, toke
             f"Saved: [{real_title}]({href})\n\n"
             f"Use `/md_{bookmark_id}` to view the article's markdown."
         )
-        await update.message.reply_text(message, parse_mode=ParseMode.MARKDOWN)
+        await update.message.reply_markdown_v2(markdownify(message))
     else:
         message = (
             f"Saved: {real_title}\n\n"
@@ -365,6 +366,47 @@ async def epub_command(update: Update, context: CallbackContext) -> None:
         logger.info(f"Archived {bid} bookmark: {r.status_code}")
 
 
+async def list_command(update: Update, context: CallbackContext) -> None:
+    """List all unarchived bookmarks with title, site and dynamic /md_<bookmark_id>."""
+    user_id = update.effective_user.id
+    token = USER_TOKEN_MAP.get(str(user_id))
+    if not token:
+        await update.message.reply_text("I don't have your Readeck token. Set it with /token <YOUR_TOKEN> or /register <password>.")
+        return
+
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "accept": "application/json",
+    }
+    params = {
+        "author": "",
+        "is_archived": "false",
+        "labels": "",
+        "search": "",
+        "site": "",
+        "title": ""
+    }
+
+    response = requests.get(f"{READECK_BASE_URL}/api/bookmarks", headers=headers, params=params)
+    
+    bookmarks = response.json()
+    if not bookmarks:
+        await update.message.reply_text("No unarchived bookmarks found.")
+        return
+
+    lines = []
+    for bookmark in bookmarks:
+        logger.info(bookmark)
+        title = bookmark.get("title", "No Title")
+        url = bookmark.get("url", "")
+        site = bookmark.get("site", "Unknown")
+        bookmark_id = bookmark.get("id", "")
+        lines.append(f"- [{title}]({url}) | {site} | /md_{bookmark_id}")
+    message = "\n".join(lines)
+    # TODO format markdown
+    await update.message.reply_markdown_v2(markdownify(message))
+
+
 
 async def error_handler(update: object, context: CallbackContext) -> None:
     logger.error("Exception while handling an update:", exc_info=context.error)
@@ -386,6 +428,7 @@ def main():
     application.add_handler(CommandHandler("token", token_command))
     application.add_handler(CommandHandler("epub", epub_command))
     
+    application.add_handler(CommandHandler("list", list_command))
     application.add_handler(MessageHandler(filters.COMMAND, dynamic_md_handler))
     # Non-command messages (likely bookmarks)
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
