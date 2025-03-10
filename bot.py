@@ -40,9 +40,14 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(message)s",
     datefmt="[%X]",
-    handlers=[RichHandler(rich_tracebacks=True)]
+    handlers=[RichHandler(rich_tracebacks=True, markup=True)]
 )
+logging.getLogger("httpx").setLevel(logging.WARNING)
+
 logger = logging.getLogger(__name__)
+
+
+
 
 class PersistentDict(dict):
     """A simple persistent dictionary stored as JSON using pathlib.
@@ -214,19 +219,18 @@ async def register_and_fetch_token(update: Update, username: str, password: str)
     payload = {"application": "telegram bot", "username": username, "password": password}
     headers = {"accept": "application/json", "content-type": "application/json"}
     r = requests.post(auth_url, headers=headers, json=payload)
-    if 200 <= r.status_code < 300:
-        data = r.json()
-        token = data.get("token")
-        if token:
-            USER_TOKEN_MAP[str(update.effective_user.id)] = token
-            await update.message.reply_text("Registration successful! Your token has been saved.")
-            logger.info(f"Token for user '{username}' saved for Telegram user {update.effective_user.id}")
-        else:
-            await update.message.reply_text("Registration succeeded but failed to retrieve token.")
-            logger.error("Token missing in auth response.")
+    r.raise_for_status()
+
+    data = r.json()
+    token = data.get("token")
+    if token:
+        USER_TOKEN_MAP[str(update.effective_user.id)] = token
+        await update.message.reply_text("Registration successful! Your token has been saved.")
+        logger.info(f"Token for user '{username}' saved for Telegram user {update.effective_user.id}")
     else:
-        await update.message.reply_text("Having troubles now... try later.")
-        logger.error(f"Failed to fetch token from API: {r.text}")
+        await update.message.reply_text("Registration succeeded but failed to retrieve token.")
+        logger.error("Token missing in auth response.")
+    
 
 async def save_bookmark(update: Update, url: str, title: str, labels: list, token: str):
     """Save a bookmark to Readeck and return a link and the bookmark_id."""
@@ -241,48 +245,32 @@ async def save_bookmark(update: Update, url: str, title: str, labels: list, toke
         "accept": "application/json",
         "content-type": "application/json",
     }
-    try:
-        r = requests.post(f"{READECK_BASE_URL}/api/bookmarks", json=data, headers=headers)
-    except requests.RequestException as e:
-        await update.message.reply_text("Having troubles now... try later.")
-        logger.error(f"Error saving bookmark: {e}")
-        return
+    
+    r = requests.post(f"{READECK_BASE_URL}/api/bookmarks", json=data, headers=headers)
+    r.raise_for_status()
 
-    if r.status_code == 202:
-        bookmark_id = r.headers.get("Bookmark-Id")
-        if bookmark_id:
-            try:
-                details = requests.get(f"{READECK_BASE_URL}/api/bookmarks/{bookmark_id}", headers=headers)
-            except requests.RequestException as e:
-                await update.message.reply_text("Having troubles now... try later.")
-                logger.error(f"Error retrieving bookmark details: {e}")
-                return
-            if details.status_code == 200:
-                info = details.json()
-                real_title = info.get("title", "No Title")
-                href = info.get("href", "")
-                if href:
-                    message = (
-                        f"Saved: [{real_title}]({href})\n\n"
-                        f"Use `/md_{bookmark_id}` to view the article's markdown."
-                    )
-                    await update.message.reply_text(message, parse_mode=ParseMode.MARKDOWN)
-                else:
-                    message = (
-                        f"Saved: {real_title}\n\n"
-                        f"Use `/md_{bookmark_id}` to view the article's markdown."
-                    )
-                    await update.message.reply_text(message)
-                logger.info(f"Saved bookmark '{real_title}' with ID {bookmark_id}")
-            else:
-                await update.message.reply_text("Saved bookmark but failed to retrieve details.")
-                logger.warning("Saved bookmark but failed to retrieve details.")
-        else:
-            await update.message.reply_text("Saved bookmark but missing Bookmark-Id header.")
-            logger.warning("Saved bookmark but missing Bookmark-Id header.")
+    bookmark_id = r.headers.get("Bookmark-Id")
+
+    details = requests.get(f"{READECK_BASE_URL}/api/bookmarks/{bookmark_id}", headers=headers)
+    details.raise_for_status()
+    info = details.json()
+    logger.info(info)
+    real_title = info.get("title", "No Title")
+    href = info.get("href", "")
+    if href:
+        message = (
+            f"Saved: [{real_title}]({href})\n\n"
+            f"Use `/md_{bookmark_id}` to view the article's markdown."
+        )
+        await update.message.reply_text(message, parse_mode=ParseMode.MARKDOWN)
     else:
-        await update.message.reply_text("Failed to save bookmark.")
-        logger.error("Failed to save bookmark.")
+        message = (
+            f"Saved: {real_title}\n\n"
+            f"Use `/md_{bookmark_id}` to view the article's markdown."
+        )
+        await update.message.reply_text(message)
+    logger.info(f"Saved bookmark '{real_title}' with ID {bookmark_id}")
+
 
 async def dynamic_md_handler(update: Update, context: CallbackContext) -> None:
     """
@@ -315,20 +303,11 @@ async def fetch_article_markdown(update: Update, bookmark_id: str, token: str):
         "Authorization": f"Bearer {token}",
         "accept": "application/epub+zip",
     }
-    try:
-        r = requests.get(f"{READECK_BASE_URL}/api/bookmarks/{bookmark_id}/article.md", headers=headers)
-    except requests.RequestException as e:
-        await update.message.reply_text("Having troubles now... try later.")
-        logger.error(f"Error fetching article markdown: {e}")
-        return
-
-    if r.status_code == 200:
-        article_text = r.text
-        await send_long_message(update, article_text)
-        logger.info(f"Fetched markdown for bookmark {bookmark_id}")
-    else:
-        await update.message.reply_text("Failed to retrieve the article markdown.")
-        logger.error("Failed to retrieve the article markdown.")
+    r = requests.get(f"{READECK_BASE_URL}/api/bookmarks/{bookmark_id}/article.md", headers=headers)
+    r.raise_for_status()
+    article_text = r.text
+    await send_long_message(update, article_text)
+    logger.info(f"Fetched markdown for bookmark {bookmark_id}")
 
 
 
@@ -385,6 +364,18 @@ async def epub_command(update: Update, context: CallbackContext) -> None:
         r = requests.patch(patch_url, headers=headers, json=patch_payload)
         logger.info(f"Archived {bid} bookmark: {r.status_code}")
 
+
+
+async def error_handler(update: object, context: CallbackContext) -> None:
+    logger.error("Exception while handling an update:", exc_info=context.error)
+    if update and hasattr(update, "message") and update.message:
+        try:
+            await update.message.reply_text("Having troubles now... try later.")
+        except Exception as e:
+            logger.error(f"Error sending error message: {e}")
+
+
+
 def main():
     application = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
 
@@ -398,6 +389,8 @@ def main():
     application.add_handler(MessageHandler(filters.COMMAND, dynamic_md_handler))
     # Non-command messages (likely bookmarks)
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+
+    application.add_error_handler(error_handler)
 
     application.run_polling()
 
