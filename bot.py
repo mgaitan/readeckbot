@@ -16,7 +16,8 @@ Features:
 #   "python-telegram-bot",
 #   "rich",
 #   "python-dotenv",
-#   "telegramify-markdown"
+#   "telegramify-markdown",
+#   "telegraph-uploader",
 # ]
 # ///
 
@@ -34,6 +35,7 @@ from telegram import Update
 from telegram.ext import CommandHandler, MessageHandler, filters, CallbackContext, ApplicationBuilder
 from rich.logging import RichHandler
 from telegramify_markdown import markdownify
+from telegraph import TelegraphAPI 
 import logging
 
 # Configure rich logging
@@ -407,6 +409,133 @@ async def list_command(update: Update, context: CallbackContext) -> None:
     await update.message.reply_markdown_v2(markdownify(message))
 
 
+# Nuevo diccionario persistente para almacenar cuentas Telegraph
+USER_TELEGRAPH = PersistentDict(".user_telegraph.json")
+
+
+
+def parse_inline(text: str) -> list:
+    """
+    Converts text that may contain markdown links into a list of nodes.
+    
+    For example, the text:
+      "Visit [Google](https://google.com)"
+    is converted into:
+      ["Visit ", {"tag": "a", "attrs": {"href": "https://google.com"}, "children": ["Google"]}]
+    """
+    parts = []
+    last_index = 0
+    # Regex for links: [text](url)
+    for m in re.finditer(r'\[(.*?)\]\((.*?)\)', text):
+        start, end = m.span()
+        # Add text before the link if any
+        if start > last_index:
+            parts.append(text[last_index:start])
+        link_text = m.group(1)
+        link_url = m.group(2)
+        parts.append({
+            "tag": "a",
+            "attrs": {"href": link_url},
+            "children": [link_text]
+        })
+        last_index = end
+    # Append remaining text
+    if last_index < len(text):
+        parts.append(text[last_index:])
+    return parts
+
+def markdown_to_nodes(md: str) -> list:
+    """
+    A very basic function that converts markdown into a list of NodeElement objects for Telegraph.
+    
+    Supported:
+      - Headers: "# " is converted to <h3> and "## " to <h4>.
+      - Inline links (using parse_inline)
+      - Other lines are wrapped in <p> tags.
+    """
+    nodes = []
+    for line in md.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        # Check for headers
+        if line.startswith("## "):
+            content = line[3:].strip()
+            children = parse_inline(content)
+            nodes.append({"tag": "h4", "children": children})
+        elif line.startswith("# "):
+            content = line[2:].strip()
+            children = parse_inline(content)
+            nodes.append({"tag": "h3", "children": children})
+        else:
+            children = parse_inline(line)
+            nodes.append({"tag": "p", "children": children})
+    return nodes
+
+
+async def read_command(update: Update, context: CallbackContext) -> None:
+    """
+    /telegraph <bookmark_id>
+    Create a Telegraph page 
+    """
+    user_id = update.effective_user.id
+    if not context.args or len(context.args) != 1:
+        await update.message.reply_text("Usage: /read <bookmark_id>")
+        return
+    bookmark_id = context.args[0]
+
+    # Obtener el Readeck token del usuario
+    token = USER_TOKEN_MAP.get(str(user_id))
+    if not token:
+        await update.message.reply_text("I don't have your Readeck token. Set it with /token or /register <password>.")
+        return
+
+    # Obtener el contenido del bookmark (article markdown)
+    article_resp = requests.get(
+        f"{READECK_BASE_URL}/api/bookmarks/{bookmark_id}/article.md",
+        headers={"Authorization": f"Bearer {token}", "accept": "application/epub+zip"}
+    )
+    article_resp.raise_for_status()
+    article_text = article_resp.text
+
+    # Obtener detalles del bookmark para el título
+    details_resp = requests.get(
+        f"{READECK_BASE_URL}/api/bookmarks/{bookmark_id}",
+        headers={"Authorization": f"Bearer {token}", "accept": "application/json"}
+    )
+    details_resp.raise_for_status()
+    
+    details = details_resp.json()
+    title = details.get("title", "No Title")
+    
+    # Verificar o crear la cuenta Telegraph del usuario
+    telegraph_account = USER_TELEGRAPH.get(str(user_id))
+    if not telegraph_account:
+        telegraph_api = TelegraphAPI()
+        account = telegraph_api.create_account(short_name=f"User{user_id}", author_name=f"User {user_id}")
+        USER_TELEGRAPH[str(user_id)] = account  # Almacenar la cuenta
+        telegraph_account = account
+        
+    access_token = telegraph_account.get("access_token")
+    author_name = telegraph_account.get("author_name", f"User {user_id}")
+
+    try:
+        def create_page():
+            # Inicializamos la API con el access_token del usuario
+            api = TelegraphAPI(access_token)
+            # Construimos el contenido en formato Telegraph (lista de nodos)
+            content = markdown_to_nodes(article_text)
+            page = api.create_page(title=title, content=content, author_name=author_name, return_content=False)
+            return page
+        page = create_page()
+        page_url = "https://telegra.ph/" + page["path"]
+        await update.message.reply_text(f"Telegraph page created: {page_url}")
+    except Exception as e:
+        logger.exception(f"Error creating Telegraph page for bookmark {bookmark_id}")
+        if update.message:
+            await update.message.reply_text("Having troubles now... try later.")
+
+
 
 async def error_handler(update: object, context: CallbackContext) -> None:
     logger.error("Exception while handling an update:", exc_info=context.error)
@@ -429,6 +558,8 @@ def main():
     application.add_handler(CommandHandler("epub", epub_command))
     
     application.add_handler(CommandHandler("list", list_command))
+    application.add_handler(CommandHandler("read", read_command))
+
     application.add_handler(MessageHandler(filters.COMMAND, dynamic_md_handler))
     # Non-command messages (likely bookmarks)
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
