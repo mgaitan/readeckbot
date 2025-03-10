@@ -17,7 +17,7 @@ Features:
 #   "rich",
 #   "python-dotenv",
 #   "telegramify-markdown",
-#   "telegraph-uploader",
+#   "your-telegraph",
 # ]
 # ///
 
@@ -32,10 +32,16 @@ from io import BytesIO
 
 from dotenv import load_dotenv
 from telegram import Update
-from telegram.ext import CommandHandler, MessageHandler, filters, CallbackContext, ApplicationBuilder
+from telegram.ext import (
+    CommandHandler,
+    MessageHandler,
+    filters,
+    CallbackContext,
+    ApplicationBuilder,
+)
 from rich.logging import RichHandler
 from telegramify_markdown import markdownify
-from telegraph import TelegraphAPI 
+from ytelegraph import TelegraphAPI
 import logging
 
 # Configure rich logging
@@ -43,19 +49,18 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(message)s",
     datefmt="[%X]",
-    handlers=[RichHandler(rich_tracebacks=True, markup=True)]
+    handlers=[RichHandler(rich_tracebacks=True, markup=True)],
 )
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)
 
 
-
-
 class PersistentDict(dict):
     """A simple persistent dictionary stored as JSON using pathlib.
-       Automatically saves on each set or delete operation.
+    Automatically saves on each set or delete operation.
     """
+
     def __init__(self, filename: str):
         super().__init__()
         self.path = Path(filename)
@@ -78,6 +83,7 @@ class PersistentDict(dict):
     def _save(self):
         self.path.write_text(json.dumps(self, indent=2))
 
+
 # Load environment variables
 load_dotenv()
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -85,8 +91,9 @@ if not TELEGRAM_BOT_TOKEN:
     raise ValueError("You must provide a TELEGRAM_BOT_TOKEN in your .env")
 
 READECK_BASE_URL = os.getenv("READECK_BASE_URL", "http://localhost:8000")
-READECK_CONFIG = os.getenv("READECK_CONFIG", None) 
+READECK_CONFIG = os.getenv("READECK_CONFIG", None)
 USER_TOKEN_MAP = PersistentDict(".user_tokens.json")
+
 
 async def start(update: Update, context: CallbackContext) -> None:
     """Send a welcome message and log user ID."""
@@ -103,6 +110,7 @@ async def start(update: Update, context: CallbackContext) -> None:
         "to directly fetch its markdown."
     )
 
+
 async def help_command(update: Update, context: CallbackContext) -> None:
     """Show help text."""
     await update.message.reply_text(
@@ -117,19 +125,21 @@ async def help_command(update: Update, context: CallbackContext) -> None:
         "• /register <password>  (your Telegram user ID is used as username)"
     )
 
+
 async def extract_url_title_labels(text: str):
     """Extract URL, title, and labels from text."""
-    url_pattern = r'(https?://[^\s]+)'
+    url_pattern = r"(https?://[^\s]+)"
     match = re.search(url_pattern, text)
     if not match:
         return None, None, []
     url = match.group(0)
     after_url = text.replace(url, "").strip()
-    labels = re.findall(r'\+(\w+)', after_url)
+    labels = re.findall(r"\+(\w+)", after_url)
     for lbl in labels:
         after_url = after_url.replace(f"+{lbl}", "")
     title = after_url.strip()
     return url, (title if title else None), labels
+
 
 async def handle_message(update: Update, context: CallbackContext) -> None:
     """
@@ -142,12 +152,14 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
 
     token = USER_TOKEN_MAP.get(str(user_id))
     if not token:
-        await update.message.reply_text("I don't have your Readeck token. "
-                                        "Set it with /token <YOUR_TOKEN> or /register <password>.")
+        await update.message.reply_text(
+            "I don't have your Readeck token. "
+            "Set it with /token <YOUR_TOKEN> or /register <password>."
+        )
         return
 
     # Check if the text contains a URL
-    if re.search(r'https?://', text):
+    if re.search(r"https?://", text):
         url, title, labels = await extract_url_title_labels(text)
         if not url:
             await update.message.reply_text("I couldn't find a valid URL.")
@@ -158,6 +170,7 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
             "I don't recognize this input.\n"
             "After saving a bookmark, use the provided /md_<bookmark_id> command to view its markdown."
         )
+
 
 async def register_command(update: Update, context: CallbackContext) -> None:
     """
@@ -176,9 +189,12 @@ async def register_command(update: Update, context: CallbackContext) -> None:
         username = context.args[0]
         password = context.args[1]
     else:
-        await update.message.reply_text("Usage: /register <user> <password>\nUsage: /register <password> (your Telegram user ID will be used as username).")
+        await update.message.reply_text(
+            "Usage: /register <user> <password>\nUsage: /register <password> (your Telegram user ID will be used as username)."
+        )
         return
     await register_and_fetch_token(update, username, password)
+
 
 async def token_command(update: Update, context: CallbackContext) -> None:
     """
@@ -194,6 +210,7 @@ async def token_command(update: Update, context: CallbackContext) -> None:
     await update.message.reply_text("Your Readeck token has been saved.")
     logger.info(f"Set token for user_id={user_id}")
 
+
 async def register_and_fetch_token(update: Update, username: str, password: str):
     """
     Register a new user in Readeck and fetch the corresponding token.
@@ -201,25 +218,42 @@ async def register_and_fetch_token(update: Update, username: str, password: str)
     If it fails, try via Docker.
     Then obtain the token via the API.
     """
-    command = ["readeck", "user"] + ['-config', READECK_CONFIG] if READECK_CONFIG else [] +  ["-u", username, "-p", password]
+    command = (
+        ["readeck", "user"] + ["-config", READECK_CONFIG]
+        if READECK_CONFIG
+        else [] + ["-u", username, "-p", password]
+    )
     logger.info(f"Attempting to register user '{username}' using CLI")
     result = subprocess.run(command, capture_output=True, text=True)
     if result.returncode != 0:
         logger.warning(f"CLI command failed: {result.stderr.strip()}, trying docker")
         docker_command = [
-            "docker", "run", "codeberg.org/readeck/readeck:latest",
-            "readeck", "user", "-u", username, "-p", password
+            "docker",
+            "run",
+            "codeberg.org/readeck/readeck:latest",
+            "readeck",
+            "user",
+            "-u",
+            username,
+            "-p",
+            password,
         ]
         result = subprocess.run(docker_command, capture_output=True, text=True)
         if result.returncode != 0:
-            await update.message.reply_text(f"Registration failed: {result.stderr.strip()}")
+            await update.message.reply_text(
+                f"Registration failed: {result.stderr.strip()}"
+            )
             logger.error(f"Registration failed with docker: {result.stderr.strip()}")
             return
 
     logger.info(f"User '{username}' registered successfully. Fetching token...")
 
     auth_url = f"{READECK_BASE_URL}/api/auth"
-    payload = {"application": "telegram bot", "username": username, "password": password}
+    payload = {
+        "application": "telegram bot",
+        "username": username,
+        "password": password,
+    }
     headers = {"accept": "application/json", "content-type": "application/json"}
     r = requests.post(auth_url, headers=headers, json=payload)
     r.raise_for_status()
@@ -228,12 +262,18 @@ async def register_and_fetch_token(update: Update, username: str, password: str)
     token = data.get("token")
     if token:
         USER_TOKEN_MAP[str(update.effective_user.id)] = token
-        await update.message.reply_text("Registration successful! Your token has been saved.")
-        logger.info(f"Token for user '{username}' saved for Telegram user {update.effective_user.id}")
+        await update.message.reply_text(
+            "Registration successful! Your token has been saved."
+        )
+        logger.info(
+            f"Token for user '{username}' saved for Telegram user {update.effective_user.id}"
+        )
     else:
-        await update.message.reply_text("Registration succeeded but failed to retrieve token.")
+        await update.message.reply_text(
+            "Registration succeeded but failed to retrieve token."
+        )
         logger.error("Token missing in auth response.")
-    
+
 
 async def save_bookmark(update: Update, url: str, title: str, labels: list, token: str):
     """Save a bookmark to Readeck and return a link and the bookmark_id."""
@@ -248,13 +288,15 @@ async def save_bookmark(update: Update, url: str, title: str, labels: list, toke
         "accept": "application/json",
         "content-type": "application/json",
     }
-    
+
     r = requests.post(f"{READECK_BASE_URL}/api/bookmarks", json=data, headers=headers)
     r.raise_for_status()
 
     bookmark_id = r.headers.get("Bookmark-Id")
 
-    details = requests.get(f"{READECK_BASE_URL}/api/bookmarks/{bookmark_id}", headers=headers)
+    details = requests.get(
+        f"{READECK_BASE_URL}/api/bookmarks/{bookmark_id}", headers=headers
+    )
     details.raise_for_status()
     info = details.json()
     logger.info(info)
@@ -281,12 +323,14 @@ async def dynamic_md_handler(update: Update, context: CallbackContext) -> None:
     """
     text = update.message.text.strip()
     if text.startswith("/md_"):
-        bookmark_id = text[len("/md_"):]
+        bookmark_id = text[len("/md_") :]
         user_id = update.effective_user.id
         token = USER_TOKEN_MAP.get(str(user_id))
         if not token:
-            await update.message.reply_text("I don't have your Readeck token. "
-                                            "Set it with /token <YOUR_TOKEN> or /register <password>.")
+            await update.message.reply_text(
+                "I don't have your Readeck token. "
+                "Set it with /token <YOUR_TOKEN> or /register <password>."
+            )
             return
         await fetch_article_markdown(update, bookmark_id, token)
     else:
@@ -295,23 +339,26 @@ async def dynamic_md_handler(update: Update, context: CallbackContext) -> None:
             "If you want the markdown of a saved article, use /md_<bookmark_id>."
         )
 
+
 async def send_long_message(update: Update, text: str):
     # Telegram message limit ~4096 characters
     limit = 4000
     for start in range(0, len(text), limit):
-        await update.message.reply_text(text[start:start+limit])
+        await update.message.reply_text(text[start : start + limit])
+
 
 async def fetch_article_markdown(update: Update, bookmark_id: str, token: str):
     headers = {
         "Authorization": f"Bearer {token}",
-        "accept": "application/epub+zip",
+        "accept": "text/markdown",
     }
-    r = requests.get(f"{READECK_BASE_URL}/api/bookmarks/{bookmark_id}/article.md", headers=headers)
+    r = requests.get(
+        f"{READECK_BASE_URL}/api/bookmarks/{bookmark_id}/article.md", headers=headers
+    )
     r.raise_for_status()
     article_text = r.text
     await send_long_message(update, article_text)
     logger.info(f"Fetched markdown for bookmark {bookmark_id}")
-
 
 
 async def epub_command(update: Update, context: CallbackContext) -> None:
@@ -319,7 +366,9 @@ async def epub_command(update: Update, context: CallbackContext) -> None:
     user_id = update.effective_user.id
     token = USER_TOKEN_MAP.get(str(user_id))
     if not token:
-        await update.message.reply_text("I don't have your Readeck token. Set it with /token <YOUR_TOKEN> or /register <password>.")
+        await update.message.reply_text(
+            "I don't have your Readeck token. Set it with /token <YOUR_TOKEN> or /register <password>."
+        )
         return
 
     headers = {
@@ -333,32 +382,41 @@ async def epub_command(update: Update, context: CallbackContext) -> None:
         "labels": "",
         "search": "",
         "site": "",
-        "title": ""
+        "title": "",
     }
 
     # Step 1: unarchive bookmarks
     list_url = f"{READECK_BASE_URL}/api/bookmarks"
-    list_response = requests.get(list_url, headers={**headers, "accept": "application/json"}, params=params)
-    
-    
+    list_response = requests.get(
+        list_url, headers={**headers, "accept": "application/json"}, params=params
+    )
+
     bookmarks = list_response.json()
     bookmark_ids = [b.get("id") for b in bookmarks if b.get("id")]
 
-    
-    if not bookmark_ids: 
+    if not bookmark_ids:
         await update.message.reply_text("There is no unread bookmarks. ")
-        return 
+        return
 
-    await update.message.reply_text(f"Found {len(bookmark_ids)} unread bookmarks. Downloading epub.")
-    
+    await update.message.reply_text(
+        f"Found {len(bookmark_ids)} unread bookmarks. Downloading epub."
+    )
 
     epub_url = f"{READECK_BASE_URL}/api/bookmarks/export.epub"
-    epub_response = requests.get(epub_url, headers={"Authorization": f"Bearer {token}", "accept": "application/epub+zip"}, params=params)
-    
+    epub_response = requests.get(
+        epub_url,
+        headers={"Authorization": f"Bearer {token}", "accept": "application/epub+zip"},
+        params=params,
+    )
+
     # Fetch the epub file
     epub_bytes = BytesIO(epub_response.content)
     epub_bytes.name = "bookmarks.epub"
-    await update.message.reply_document(document=epub_bytes, filename="bookmarks.epub", caption="Here is your epub file.")
+    await update.message.reply_document(
+        document=epub_bytes,
+        filename="bookmarks.epub",
+        caption="Here is your epub file.",
+    )
 
     # archive
     for bid in bookmark_ids:
@@ -373,7 +431,9 @@ async def list_command(update: Update, context: CallbackContext) -> None:
     user_id = update.effective_user.id
     token = USER_TOKEN_MAP.get(str(user_id))
     if not token:
-        await update.message.reply_text("I don't have your Readeck token. Set it with /token <YOUR_TOKEN> or /register <password>.")
+        await update.message.reply_text(
+            "I don't have your Readeck token. Set it with /token <YOUR_TOKEN> or /register <password>."
+        )
         return
 
     headers = {
@@ -386,11 +446,13 @@ async def list_command(update: Update, context: CallbackContext) -> None:
         "labels": "",
         "search": "",
         "site": "",
-        "title": ""
+        "title": "",
     }
 
-    response = requests.get(f"{READECK_BASE_URL}/api/bookmarks", headers=headers, params=params)
-    
+    response = requests.get(
+        f"{READECK_BASE_URL}/api/bookmarks", headers=headers, params=params
+    )
+
     bookmarks = response.json()
     if not bookmarks:
         await update.message.reply_text("No unarchived bookmarks found.")
@@ -413,11 +475,10 @@ async def list_command(update: Update, context: CallbackContext) -> None:
 USER_TELEGRAPH = PersistentDict(".user_telegraph.json")
 
 
-
 def parse_inline(text: str) -> list:
     """
     Converts text that may contain markdown links into a list of nodes.
-    
+
     For example, the text:
       "Visit [Google](https://google.com)"
     is converted into:
@@ -426,28 +487,25 @@ def parse_inline(text: str) -> list:
     parts = []
     last_index = 0
     # Regex for links: [text](url)
-    for m in re.finditer(r'\[(.*?)\]\((.*?)\)', text):
+    for m in re.finditer(r"\[(.*?)\]\((.*?)\)", text):
         start, end = m.span()
         # Add text before the link if any
         if start > last_index:
             parts.append(text[last_index:start])
         link_text = m.group(1)
         link_url = m.group(2)
-        parts.append({
-            "tag": "a",
-            "attrs": {"href": link_url},
-            "children": [link_text]
-        })
+        parts.append({"tag": "a", "attrs": {"href": link_url}, "children": [link_text]})
         last_index = end
     # Append remaining text
     if last_index < len(text):
         parts.append(text[last_index:])
     return parts
 
+
 def markdown_to_nodes(md: str) -> list:
     """
     A very basic function that converts markdown into a list of NodeElement objects for Telegraph.
-    
+
     Supported:
       - Headers: "# " is converted to <h3> and "## " to <h4>.
       - Inline links (using parse_inline)
@@ -475,8 +533,11 @@ def markdown_to_nodes(md: str) -> list:
 
 async def read_command(update: Update, context: CallbackContext) -> None:
     """
-    /telegraph <bookmark_id>
-    Create a Telegraph page 
+    /read <bookmark_id>
+
+    Publishes the markdown of the specified bookmark to Telegraph.
+    If the user does not have a Telegraph account stored, one is created automatically,
+    and its account information is saved in USER_TELEGRAPH.
     """
     user_id = update.effective_user.id
     if not context.args or len(context.args) != 1:
@@ -484,57 +545,61 @@ async def read_command(update: Update, context: CallbackContext) -> None:
         return
     bookmark_id = context.args[0]
 
-    # Obtener el Readeck token del usuario
+    # Retrieve the user's Readeck token
     token = USER_TOKEN_MAP.get(str(user_id))
     if not token:
-        await update.message.reply_text("I don't have your Readeck token. Set it with /token or /register <password>.")
+        await update.message.reply_text(
+            "I don't have your Readeck token. Use /token or /register <password>."
+        )
         return
 
-    # Obtener el contenido del bookmark (article markdown)
-    article_resp = requests.get(
+    # Fetch the bookmark's markdown content (synchronously, letting errors propagate)
+    auth_header = {
+        "Authorization": f"Bearer {token}",
+        "accept": "text/markdown",
+    }
+    md_response = requests.get(
         f"{READECK_BASE_URL}/api/bookmarks/{bookmark_id}/article.md",
-        headers={"Authorization": f"Bearer {token}", "accept": "application/epub+zip"}
+        headers=auth_header,
     )
-    article_resp.raise_for_status()
-    article_text = article_resp.text
+    md_response.raise_for_status()
+    md_content = md_response.text
 
-    # Obtener detalles del bookmark para el título
-    details_resp = requests.get(
-        f"{READECK_BASE_URL}/api/bookmarks/{bookmark_id}",
-        headers={"Authorization": f"Bearer {token}", "accept": "application/json"}
+    # Fetch bookmark details to retrieve the title
+    details_header = {"Authorization": f"Bearer {token}", "accept": "application/json"}
+    details_response = requests.get(
+        f"{READECK_BASE_URL}/api/bookmarks/{bookmark_id}", headers=details_header
     )
-    details_resp.raise_for_status()
-    
-    details = details_resp.json()
+    details_response.raise_for_status()
+    details = details_response.json()
     title = details.get("title", "No Title")
-    
-    # Verificar o crear la cuenta Telegraph del usuario
+
+    # Check if the user already has a Telegraph account; if not, create one automatically.
     telegraph_account = USER_TELEGRAPH.get(str(user_id))
-    if not telegraph_account:
-        telegraph_api = TelegraphAPI()
-        account = telegraph_api.create_account(short_name=f"User{user_id}", author_name=f"User {user_id}")
-        USER_TELEGRAPH[str(user_id)] = account  # Almacenar la cuenta
-        telegraph_account = account
-        
-    access_token = telegraph_account.get("access_token")
-    author_name = telegraph_account.get("author_name", f"User {user_id}")
+    if telegraph_account:
+        telegraph_token = telegraph_account.get("access_token")
+        ph = TelegraphAPI(telegraph_token)
+    else:
+        telegram_user = update.effective_user.username or str(user_id)
+        ph = TelegraphAPI(
+            short_name=f"@{telegram_user}'s readeckbot blog",
+            author_name=f"@{telegram_user}",
+            author_url=f"https://t.me/{telegram_user}",
+        )
+        telegraph_token = ph.access_token
+        USER_TELEGRAPH[str(user_id)] = {
+            "access_token": telegraph_token,
+            "author_name": f"User {user_id}",
+        }
 
-    try:
-        def create_page():
-            # Inicializamos la API con el access_token del usuario
-            api = TelegraphAPI(access_token)
-            # Construimos el contenido en formato Telegraph (lista de nodos)
-            content = markdown_to_nodes(article_text)
-            page = api.create_page(title=title, content=content, author_name=author_name, return_content=False)
-            return page
-        page = create_page()
-        page_url = "https://telegra.ph/" + page["path"]
-        await update.message.reply_text(f"Telegraph page created: {page_url}")
-    except Exception as e:
-        logger.exception(f"Error creating Telegraph page for bookmark {bookmark_id}")
-        if update.message:
-            await update.message.reply_text("Having troubles now... try later.")
-
+    # Publish the markdown as a Telegraph page.
+    page_link = ph.create_page_md(
+        title,
+        md_content,
+        author_name=details.get("author"),
+        author_url=details.get("url"),
+    )
+    await update.message.reply_text(f"Your article is live at: {page_link}")
 
 
 async def error_handler(update: object, context: CallbackContext) -> None:
@@ -546,7 +611,6 @@ async def error_handler(update: object, context: CallbackContext) -> None:
             logger.error(f"Error sending error message: {e}")
 
 
-
 def main():
     application = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
 
@@ -556,17 +620,20 @@ def main():
     application.add_handler(CommandHandler("register", register_command))
     application.add_handler(CommandHandler("token", token_command))
     application.add_handler(CommandHandler("epub", epub_command))
-    
+
     application.add_handler(CommandHandler("list", list_command))
     application.add_handler(CommandHandler("read", read_command))
 
     application.add_handler(MessageHandler(filters.COMMAND, dynamic_md_handler))
     # Non-command messages (likely bookmarks)
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    application.add_handler(
+        MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)
+    )
 
     application.add_error_handler(error_handler)
 
     application.run_polling()
+
 
 if __name__ == "__main__":
     main()
