@@ -136,18 +136,18 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
         )
         return
 
-    # Check if the text contains a URL
-    if re.search(r"https?://", text):
-        url, title, labels = await extract_url_title_labels(text)
-        if not url:
-            await update.message.reply_text("I couldn't find a valid URL.")
-            return
-        await save_bookmark(update, url, title, labels, token)
-    else:
+    if not re.search(r"https?://", text):
         await update.message.reply_text(
             "I don't recognize this input.\n"
             "After saving a bookmark, use the provided /md_<bookmark_id> command to view its markdown."
         )
+    else:
+        # Check if the text contains a URL
+        for line in text.splitlines():
+            url, title, labels = await extract_url_title_labels(line)
+            if url:
+                await save_bookmark(update, url, title, labels, token)
+
 
 
 async def register_command(update: Update, context: CallbackContext) -> None:
