@@ -10,16 +10,6 @@ Features:
 - Uses a persistent dictionary (JSON file) to store user tokens.
 """
 
-# /// script
-# dependencies = [
-#   "requests",
-#   "python-telegram-bot",
-#   "rich",
-#   "python-dotenv",
-#   "telegramify-markdown",
-#   "your-telegraph",
-# ]
-# ///
 
 import os
 import re

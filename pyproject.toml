@@ -1,0 +1,35 @@
+[build-system]
+requires = ["flit_core >=3.2,<4"]
+build-backend = "flit_core.buildapi"
+
+[project]
+name = "readeckbot"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  "requests",
+  "python-telegram-bot",
+  "rich",
+  "python-dotenv",
+  "telegramify-markdown",
+  "your-telegraph",
+]
+authors = [
+    {name = "Martín Gaitán", email = "gaitan@gmail.com"}
+]
+dynamic = ["version", "description"]
+
+[project.urls]
+Home = "https://github.com/mgaitan/readeckbot"
+
+[project.scripts]
+readeckbot = "readeckbot.main:main"
+
+[tool.ruff]
+line-length = 120
+
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.4",
+]
