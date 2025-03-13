@@ -22,6 +22,8 @@ from telegramify_markdown import markdownify
 from ytelegraph import TelegraphAPI
 import logging
 
+from .md_to_dom import md_to_dom
+
 # Configure rich logging
 logging.basicConfig(
     level=logging.INFO,
@@ -570,14 +572,20 @@ async def read_command(update: Update, context: CallbackContext) -> None:
             "author_name": f"User {user_id}",
         }
 
+    # Convert the markdown to a Telegraph-compatible DOM
+    dom = md_to_dom(md_content)
+    # Optionally remove the first node if it redundantly contains the title
+    if dom and title in dom[0]['children']:
+        dom = dom[1:]
+
     # Publish the markdown as a Telegraph page.
-    page_link = ph.create_page_md(
+    page_link = ph.create_page(
         title,
-        md_content,
+        dom,
         author_name=details.get("author"),
         author_url=details.get("url"),
     )
-    await update.message.reply_text(f"Your article is live at: {page_link}")
+    await query.message.reply_text(f"Your article is live at: {page_link}")
 
 
 async def error_handler(update: object, context: CallbackContext) -> None:

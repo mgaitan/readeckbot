@@ -13,6 +13,7 @@ dependencies = [
   "python-dotenv",
   "telegramify-markdown",
   "your-telegraph",
+  "mistletoe",
 ]
 authors = [
     {name = "Martín Gaitán", email = "gaitan@gmail.com"}
