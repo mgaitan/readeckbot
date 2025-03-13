@@ -16,6 +16,8 @@ from telegram.ext import (
     filters,
     CallbackContext,
     ApplicationBuilder,
+    CallbackQueryHandler
+
 )
 from rich.logging import RichHandler
 from telegramify_markdown import markdownify
@@ -255,6 +257,10 @@ async def register_and_fetch_token(update: Update, username: str, password: str)
         logger.error("Token missing in auth response.")
 
 
+
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
+
 async def save_bookmark(update: Update, url: str, title: str, labels: list, token: str):
     """Save a bookmark to Readeck and return a link and the bookmark_id."""
     data = {"url": url}
@@ -281,19 +287,19 @@ async def save_bookmark(update: Update, url: str, title: str, labels: list, toke
     info = details.json()
     logger.info(info)
     real_title = info.get("title", "No Title")
-    href = info.get("href", "")
-    if href:
-        message = (
-            f"Saved: [{real_title}]({href})\n\n"
-            f"Use `/md_{bookmark_id}` to view the article's markdown."
-        )
-        await update.message.reply_markdown_v2(markdownify(message))
-    else:
-        message = (
-            f"Saved: {real_title}\n\n"
-            f"Use `/md_{bookmark_id}` to view the article's markdown."
-        )
-        await update.message.reply_text(message)
+    url = info.get("url", "")
+    
+    # Create an inline keyboard with a "Read" button that pre-fills "/read <bookmark_id>" in the chat.
+    reply_markup = InlineKeyboardMarkup([
+        [InlineKeyboardButton("Read", callback_data=f"read_{bookmark_id}")]
+    ])
+
+    message = (
+        f"Saved: [{real_title}]({url})\n\n"
+        f"Use `/md_{bookmark_id}` to view the article's markdown."
+    )
+    await update.message.reply_markdown_v2(markdownify(message), reply_markup=reply_markup)
+
     logger.info(f"Saved bookmark '{real_title}' with ID {bookmark_id}")
 
 
@@ -510,34 +516,33 @@ def markdown_to_nodes(md: str) -> list:
             nodes.append({"tag": "p", "children": children})
     return nodes
 
-
-async def read_command(update: Update, context: CallbackContext) -> None:
+async def read_callback(update: Update, context: CallbackContext) -> None:
     """
-    /read <bookmark_id>
-
-    Publishes the markdown of the specified bookmark to Telegraph.
-    If the user does not have a Telegraph account stored, one is created automatically,
-    and its account information is saved in USER_TELEGRAPH.
+    Handles the "Read" callback triggered by the inline button.
+    Extracts the bookmark_id from the callback data and publishes
+    the corresponding article's markdown to Telegraph.
     """
+    query = update.callback_query
+    await query.answer()  # Acknowledge the callback
+
     user_id = update.effective_user.id
-    if not context.args or len(context.args) != 1:
-        await update.message.reply_text("Usage: /read <bookmark_id>")
+    # Extract the bookmark_id from the callback data ("read_<bookmark_id>")
+    try:
+        _, bookmark_id = query.data.split("_", 1)
+    except ValueError:
+        await query.message.reply_text("Invalid callback data.")
         return
-    bookmark_id = context.args[0]
 
     # Retrieve the user's Readeck token
     token = USER_TOKEN_MAP.get(str(user_id))
     if not token:
-        await update.message.reply_text(
+        await query.message.reply_text(
             "I don't have your Readeck token. Use /token or /register <password>."
         )
         return
 
-    # Fetch the bookmark's markdown content (synchronously, letting errors propagate)
-    auth_header = {
-        "Authorization": f"Bearer {token}",
-        "accept": "text/markdown",
-    }
+    # Fetch the bookmark's markdown content
+    auth_header = {"Authorization": f"Bearer {token}", "accept": "text/markdown"}
     md_response = requests.get(
         f"{READECK_BASE_URL}/api/bookmarks/{bookmark_id}/article.md",
         headers=auth_header,
@@ -545,7 +550,7 @@ async def read_command(update: Update, context: CallbackContext) -> None:
     md_response.raise_for_status()
     md_content = md_response.text
 
-    # Fetch bookmark details to retrieve the title
+    # Fetch bookmark details to retrieve the title and additional info
     details_header = {"Authorization": f"Bearer {token}", "accept": "application/json"}
     details_response = requests.get(
         f"{READECK_BASE_URL}/api/bookmarks/{bookmark_id}", headers=details_header
@@ -608,7 +613,7 @@ def main():
     application.add_handler(CommandHandler("epub", epub_command))
 
     application.add_handler(CommandHandler("list", list_command))
-    application.add_handler(CommandHandler("read", read_command))
+    application.add_handler(CallbackQueryHandler(read_callback, pattern=r"^read_"))
 
     application.add_handler(MessageHandler(filters.COMMAND, dynamic_md_handler))
     # Non-command messages (likely bookmarks)
