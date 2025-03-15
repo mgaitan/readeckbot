@@ -1,15 +1,13 @@
-
 import os
 import re
 import json
-import requests
 import subprocess
 from pathlib import Path
 
 from io import BytesIO
 
 from dotenv import load_dotenv
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     CommandHandler,
     MessageHandler,
@@ -19,12 +17,17 @@ from telegram.ext import (
     CallbackQueryHandler
 
 )
+
 from rich.logging import RichHandler
 from telegramify_markdown import markdownify
 from ytelegraph import TelegraphAPI
 import logging
 
+from . import requests
 from .md_to_dom import md_to_dom
+
+
+
 
 # Configure rich logging
 logging.basicConfig(
@@ -201,9 +204,9 @@ async def register_and_fetch_token(update: Update, username: str, password: str)
     Then obtain the token via the API.
     """
     command = (
-        ["readeck", "user"] + ["-config", READECK_CONFIG]
+        ["readeck", "user"] + (["-config", READECK_CONFIG]
         if READECK_CONFIG
-        else [] + ["-u", username, "-p", password]
+        else []) + ["-u", username, "-p", password]
     )
     logger.info(f"Attempting to register user '{username}' using CLI")
     result = subprocess.run(command, capture_output=True, text=True)
@@ -237,7 +240,7 @@ async def register_and_fetch_token(update: Update, username: str, password: str)
         "password": password,
     }
     headers = {"accept": "application/json", "content-type": "application/json"}
-    r = requests.post(auth_url, headers=headers, json=payload)
+    r = await requests.post(auth_url, headers=headers, json=payload)
     r.raise_for_status()
 
     data = r.json()
@@ -257,10 +260,6 @@ async def register_and_fetch_token(update: Update, username: str, password: str)
         logger.error("Token missing in auth response.")
 
 
-
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-
-
 async def save_bookmark(update: Update, url: str, title: str, labels: list, token: str):
     """Save a bookmark to Readeck and return a link and the bookmark_id."""
     data = {"url": url}
@@ -275,12 +274,12 @@ async def save_bookmark(update: Update, url: str, title: str, labels: list, toke
         "content-type": "application/json",
     }
 
-    r = requests.post(f"{READECK_BASE_URL}/api/bookmarks", json=data, headers=headers)
+    r = await requests.post(f"{READECK_BASE_URL}/api/bookmarks", json=data, headers=headers)
     r.raise_for_status()
 
     bookmark_id = r.headers.get("Bookmark-Id")
 
-    details = requests.get(
+    details = await requests.get(
         f"{READECK_BASE_URL}/api/bookmarks/{bookmark_id}", headers=headers
     )
     details.raise_for_status()
@@ -338,7 +337,7 @@ async def fetch_article_markdown(update: Update, bookmark_id: str, token: str):
         "Authorization": f"Bearer {token}",
         "accept": "text/markdown",
     }
-    r = requests.get(
+    r = await requests.get(
         f"{READECK_BASE_URL}/api/bookmarks/{bookmark_id}/article.md", headers=headers
     )
     r.raise_for_status()
@@ -373,7 +372,7 @@ async def epub_command(update: Update, context: CallbackContext) -> None:
 
     # Step 1: unarchive bookmarks
     list_url = f"{READECK_BASE_URL}/api/bookmarks"
-    list_response = requests.get(
+    list_response = await requests.get(
         list_url, headers={**headers, "accept": "application/json"}, params=params
     )
 
@@ -389,7 +388,7 @@ async def epub_command(update: Update, context: CallbackContext) -> None:
     )
 
     epub_url = f"{READECK_BASE_URL}/api/bookmarks/export.epub"
-    epub_response = requests.get(
+    epub_response = await requests.get(
         epub_url,
         headers={"Authorization": f"Bearer {token}", "accept": "application/epub+zip"},
         params=params,
@@ -408,7 +407,7 @@ async def epub_command(update: Update, context: CallbackContext) -> None:
     for bid in bookmark_ids:
         patch_url = f"{READECK_BASE_URL}/api/bookmarks/{bid}"
         patch_payload = {"is_archived": True}
-        r = requests.patch(patch_url, headers=headers, json=patch_payload)
+        r = await requests.patch(patch_url, headers=headers, json=patch_payload)
         logger.info(f"Archived {bid} bookmark: {r.status_code}")
 
 
@@ -435,7 +434,7 @@ async def list_command(update: Update, context: CallbackContext) -> None:
         "title": "",
     }
 
-    response = requests.get(
+    response = await requests.get(
         f"{READECK_BASE_URL}/api/bookmarks", headers=headers, params=params
     )
 
@@ -543,7 +542,7 @@ async def read_callback(update: Update, context: CallbackContext) -> None:
 
     # Fetch the bookmark's markdown content
     auth_header = {"Authorization": f"Bearer {token}", "accept": "text/markdown"}
-    md_response = requests.get(
+    md_response = await requests.get(
         f"{READECK_BASE_URL}/api/bookmarks/{bookmark_id}/article.md",
         headers=auth_header,
     )
@@ -552,7 +551,7 @@ async def read_callback(update: Update, context: CallbackContext) -> None:
 
     # Fetch bookmark details to retrieve the title and additional info
     details_header = {"Authorization": f"Bearer {token}", "accept": "application/json"}
-    details_response = requests.get(
+    details_response = await requests.get(
         f"{READECK_BASE_URL}/api/bookmarks/{bookmark_id}", headers=details_header
     )
     details_response.raise_for_status()
