@@ -2,13 +2,13 @@ from mistletoe import Document, block_token, span_token
 from mistletoe.base_renderer import BaseRenderer
 
 
-
 class TelegraphDomRenderer(BaseRenderer):
     """
     A custom renderer that converts a mistletoe AST into a DOM list
     of dictionaries for Telegraph. Each dictionary represents a node
     with a tag, optional attributes, and children.
     """
+
     def render_document(self, token: block_token.Document):
         # The top-level document returns a list of nodes.
         return [self.render(child) for child in token.children]
@@ -115,13 +115,14 @@ class TelegraphDomRenderer(BaseRenderer):
                 result.append(rendered)
         return result
 
+
 def md_to_dom(markdown_text: str):
     """
     Converts Markdown text to a Telegraph-compatible DOM structure.
-    
+
     Args:
         markdown_text (str): The input Markdown text.
-    
+
     Returns:
         list: A list of dictionaries representing the DOM structure.
     """
@@ -129,4 +130,3 @@ def md_to_dom(markdown_text: str):
         # The Document token is the root of the AST.
         ast = renderer.render(Document(markdown_text))
         return ast
-
