@@ -1,17 +1,13 @@
 A Telegram bot that interfaces with a self-hosted Readeck instance to manage bookmarks.
 
-Features that works:
+Features:
+
+- /register (create a new user) or /token to register the bot with an existent user
 - Save bookmarks by sending a URL (with optional title and tags).
-- Supports per-user Readeck token configuration via @token <YOUR_TOKEN>.
-- Configuration (Telegram token and Readeck URL) is loaded from a .env file.
-- Uses a persistent dictionary (JSON file) to store user tokens.
-
-Not working: 
-- After saving, it provides a dynamic command (/md_<bookmark_id>) to fetch the article's markdown.
-- Handles long markdown responses by splitting them into multiple messages.
-
-Todo:
-- List of saved bookmarks (today?) . optianlly filtering by tags
+- Read. Create a simplified version of the article in telegra.ph
+- /md_<id> return the raw markdown
+- /list  . unread articles 
+- /epub generate an epub with the unread articles
 
 
 ### How to setup
@@ -21,8 +17,9 @@ Create a `.env`
 TELEGRAM_BOT_TOKEN=<your_bot_token>
 READECK_BASE_URL=<your_readec_url>
 READECK_CONFIG=<path_to_config.yaml>    # optional.
+READECK_DATA=/PATH/TO/data    # optional.
 ```
 
-run with `uv run bot.py` and voilá, you can chat with your token
+run with `uv run readeckbot` and voilá, you can chat with your token
 
 Happy reading! 
