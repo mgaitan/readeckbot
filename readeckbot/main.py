@@ -74,6 +74,7 @@ if not TELEGRAM_BOT_TOKEN:
 
 READECK_BASE_URL = os.getenv("READECK_BASE_URL", "http://localhost:8000")
 READECK_CONFIG = os.getenv("READECK_CONFIG", None)
+READECK_DATA = os.getenv("READECK_DATA", None)
 USER_TOKEN_MAP = PersistentDict(".user_tokens.json")
 
 
@@ -202,7 +203,12 @@ async def register_and_fetch_token(update: Update, username: str, password: str)
         ["readeck", "user"] + (["-config", READECK_CONFIG] if READECK_CONFIG else []) + ["-u", username, "-p", password]
     )
     logger.info(f"Attempting to register user '{username}' using CLI")
-    result = subprocess.run(command, capture_output=True, text=True)
+    logger.debug(f"CLI command: {command}")
+    kw = {}
+    if READECK_DATA:
+        logger.info(f"Using READECK_DATA={READECK_DATA}")
+        kw["cwd"] = Path(READECK_DATA).parent
+    result = subprocess.run(command, capture_output=True, text=True, **kw)
     if result.returncode != 0:
         logger.warning(f"CLI command failed: {result.stderr.strip()}, trying docker")
         docker_command = [
