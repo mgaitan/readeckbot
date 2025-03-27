@@ -541,7 +541,7 @@ async def read_callback(update: Update, context: CallbackContext) -> None:
             author_name=f"@{telegram_user}",
             author_url=f"https://t.me/{telegram_user}",
         )
-        telegraph_token = ph.access_token
+        telegraph_token = ph.account.access_token
         USER_TELEGRAPH[str(user_id)] = {
             "access_token": telegraph_token,
             "author_name": f"User {user_id}",
