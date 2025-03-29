@@ -1,4 +1,5 @@
 A Telegram bot that interfaces with a self-hosted [Readeck](https://readeck.org/) instance to manage bookmarks.
+It's based on the [python-telegram-bot](https://python-telegram-bot.org/) framework.
 
 Features:
 
@@ -23,7 +24,7 @@ cd readeckbot
 
 Download the appropriate binary for your system from the official site: https://readeck.org/en/download
 
-Unzip it and place the `readeck` binary **in the same directory as the bot code**.
+Place the `readeck` binary **in the same directory as the bot code**.  
 
 **3. Start the Readeck API server in a console**
 
@@ -67,13 +68,16 @@ This project uses [`uv`](https://github.com/astral-sh/uv), a fast Python package
 
 > Don't have it yet? Install it from here: https://github.com/astral-sh/uv#installation
 
-Then run the bot:
+Then in another terminal run the bot:
 
 ```bash
 uv run readeckbot
 ```
 
-That’s it! You can now start chatting with your bot on Telegram using your own token.
+The first time it will install Python and the depenencies as needed and can take a bit, but 
+that’s it! 
+
+You can now start chatting with your bot on Telegram using your own token.
 
 
 Happy hacking and happy reading! 📚🤖
