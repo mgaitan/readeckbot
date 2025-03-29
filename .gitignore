@@ -169,3 +169,10 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+
+# readeckbot
+.user_telegraph.json
+.user_tokens.json
+config.toml
+data/*
