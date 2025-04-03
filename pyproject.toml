@@ -25,6 +25,7 @@ Home = "https://github.com/mgaitan/readeckbot"
 
 [project.scripts]
 readeckbot = "readeckbot.main:main"
+hello = "readeckbot.main:hello"
 
 [tool.ruff]
 line-length = 120
@@ -32,5 +33,6 @@ line-length = 120
 
 [dependency-groups]
 dev = [
+    "ipdb>=0.13.13",
     "pytest>=8.3.4",
 ]
