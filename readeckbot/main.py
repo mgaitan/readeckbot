@@ -290,6 +290,7 @@ async def dynamic_md_handler(update: Update, context: CallbackContext) -> None:
     """
     Handle dynamic commands like /md_<bookmark_id> to fetch markdown.
     """
+    import ipdb; ipdb.set_trace()
     text = update.message.text.strip()
     if text.startswith("/md_"):
         bookmark_id = text[len("/md_") :]
@@ -593,6 +594,10 @@ def main():
 
     application.run_polling()
 
+def hello():
+    print("Running nvim")
+    subprocess.run(["nvim"])
 
 if __name__ == "__main__":
+
     main()
