@@ -7,7 +7,7 @@ from pathlib import Path
 from io import BytesIO
 
 from dotenv import load_dotenv
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, Message, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     CommandHandler,
     MessageHandler,
@@ -272,44 +272,45 @@ async def save_bookmark(update: Update, url: str, title: str, labels: list, toke
     real_title = info.get("title", "No Title")
     url = info.get("url", "")
 
-    # Create an inline keyboard with a "Read" button that pre-fills "/read <bookmark_id>" in the chat.
-    reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton("Read", callback_data=f"read_{bookmark_id}")]])
+    # Create an inline keyboard with actions pre-fills
+    button_read = InlineKeyboardButton("Read", callback_data=f"read_{bookmark_id}")
+    button_publish = InlineKeyboardButton("Publish", callback_data=f"pub_{bookmark_id}")
+    button_epub = InlineKeyboardButton("Epub", callback_data=f"epub_{bookmark_id}")
+    reply_markup = InlineKeyboardMarkup([[button_read, button_publish], [button_epub]])
 
-    message = f"Saved: [{real_title}]({url})\n\nUse `/md_{bookmark_id}` to view the article's markdown."
-    await update.message.reply_markdown_v2(markdownify(message), reply_markup=reply_markup)
+    message = "Saved"
+    await update.message.reply_markdown_v2(message, reply_markup=reply_markup)
 
     logger.info(f"Saved bookmark '{real_title}' with ID {bookmark_id}")
 
 
-async def dynamic_md_handler(update: Update, context: CallbackContext) -> None:
+async def read_handler(update: Update, context: CallbackContext) -> None:
     """
-    Handle dynamic commands like /md_<bookmark_id> to fetch markdown.
+    Handle dynamic md_<bookmark_id> to fetch markdown.
     """
-    text = update.message.text.strip()
-    if text.startswith("/md_"):
-        bookmark_id = text[len("/md_") :]
-        user_id = update.effective_user.id
-        token = USER_TOKEN_MAP.get(str(user_id))
-        if not token:
-            await update.message.reply_text(
-                "I don't have your Readeck token. Set it with /token <YOUR_TOKEN> or /register <password>."
-            )
-            return
-        article_text = await fetch_article_markdown(bookmark_id, token)
-        await send_long_message(update, article_text)
-        logger.info(f"Fetched markdown for bookmark {bookmark_id}")
+    query = update.callback_query
+    await query.answer()  # Acknowledge the callback
 
-    else:
-        await update.message.reply_text(
-            "I don't recognize this command.\nIf you want the markdown of a saved article, use /md_<bookmark_id>."
+    text = query.data.strip()
+   
+    _, bookmark_id = text.split("_")
+    
+    user_id = update.effective_user.id
+    token = USER_TOKEN_MAP.get(str(user_id))
+    if not token:
+        await query.message.reply_text(
+            "I don't have your Readeck token. Set it with /token <YOUR_TOKEN> or /register <password>."
         )
+        return
+    article_text = await fetch_article_markdown(bookmark_id, token)
+    await send_long_message(query.message, article_text)
+    
 
-
-async def send_long_message(update: Update, text: str):
+async def send_long_message(message: Message, text: str):
     # Telegram message limit ~4096 characters
     limit = 4000
     for start in range(0, len(text), limit):
-        await update.message.reply_text(text[start : start + limit])
+        await message.reply_text(text[start : start + limit])
 
 
 async def fetch_article_markdown(bookmark_id: str, token: str):
@@ -487,9 +488,9 @@ def markdown_to_nodes(md: str) -> list:
     return nodes
 
 
-async def read_callback(update: Update, context: CallbackContext) -> None:
+async def publish_handler(update: Update, context: CallbackContext) -> None:
     """
-    Handles the "Read" callback triggered by the inline button.
+    Handles the "publish" callback triggered by the inline button.
     Extracts the bookmark_id from the callback data and publishes
     the corresponding article's markdown to Telegraph.
     """
@@ -511,13 +512,7 @@ async def read_callback(update: Update, context: CallbackContext) -> None:
         return
 
     # Fetch the bookmark's markdown content
-    auth_header = {"Authorization": f"Bearer {token}", "accept": "text/markdown"}
-    md_response = await requests.get(
-        f"{READECK_BASE_URL}/api/bookmarks/{bookmark_id}/article.md",
-        headers=auth_header,
-    )
-    md_response.raise_for_status()
-    md_content = md_response.text
+    md_content = await fetch_article_markdown(bookmark_id, token)
 
     # Fetch bookmark details to retrieve the title and additional info
     details_header = {"Authorization": f"Bearer {token}", "accept": "application/json"}
@@ -580,9 +575,12 @@ def main():
     application.add_handler(CommandHandler("epub", epub_command))
 
     application.add_handler(CommandHandler("list", list_command))
-    application.add_handler(CallbackQueryHandler(read_callback, pattern=r"^read_"))
 
-    application.add_handler(MessageHandler(filters.COMMAND, dynamic_md_handler))
+    application.add_handler(CallbackQueryHandler(read_handler, pattern=r"^read_"))
+
+    application.add_handler(CallbackQueryHandler(publish_handler, pattern=r"^pub_"))
+
+    
     # Non-command messages (likely bookmarks)
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
