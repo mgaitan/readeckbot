@@ -97,14 +97,12 @@ async def start(update: Update, context: CallbackContext) -> None:
 async def help_command(update: Update, context: CallbackContext) -> None:
     """Show help text."""
     await update.message.reply_text(
-        "Send me a URL along with an optional title and +labels.\n"
+        "Send me a URL along with an optional +labels.\n"
         "Example:\n"
         "https://example.com/article Interesting Article +news +tech\n\n"
         "I will save it to your Readeck account.\n"
         "After saving, I'll show you a command /md_<bookmark_id> to get the article's markdown.\n\n"
-        "To set your Readeck credentials use:\n"
-        "• /token <YOUR_READECK_TOKEN>\n"
-        "or\n"
+        "To login or register, use:\n"
         "• /register <password>  (your Telegram user ID is used as username)"
     )
 
@@ -160,10 +158,7 @@ async def register_command(update: Update, context: CallbackContext) -> None:
     Uses the Telegram user ID as the username.
     """
     user_id = update.effective_user.id
-    if not context.args:
-        username = str(user_id)
-        password = str(user_id)
-    elif len(context.args) == 1:
+    if len(context.args) == 1:
         username = str(user_id)
         password = context.args[0]
     elif len(context.args) == 2:
@@ -171,7 +166,7 @@ async def register_command(update: Update, context: CallbackContext) -> None:
         password = context.args[1]
     else:
         await update.message.reply_text(
-            "Usage: /register <user> <password>\nUsage: /register <password> (your Telegram user ID will be used as username)."
+            "Usage: /register <user> <password>\nor /register <password> (your Telegram user ID will be used as username)."
         )
         return
     await register_and_fetch_token(update, username, password)
@@ -300,7 +295,10 @@ async def dynamic_md_handler(update: Update, context: CallbackContext) -> None:
                 "I don't have your Readeck token. Set it with /token <YOUR_TOKEN> or /register <password>."
             )
             return
-        await fetch_article_markdown(update, bookmark_id, token)
+        article_text = await fetch_article_markdown(bookmark_id, token)
+        await send_long_message(update, article_text)
+        logger.info(f"Fetched markdown for bookmark {bookmark_id}")
+
     else:
         await update.message.reply_text(
             "I don't recognize this command.\nIf you want the markdown of a saved article, use /md_<bookmark_id>."
@@ -314,17 +312,16 @@ async def send_long_message(update: Update, text: str):
         await update.message.reply_text(text[start : start + limit])
 
 
-async def fetch_article_markdown(update: Update, bookmark_id: str, token: str):
+async def fetch_article_markdown(bookmark_id: str, token: str):
+    """Fetch the markdown of a bookmark by its ID."""
     headers = {
         "Authorization": f"Bearer {token}",
         "accept": "text/markdown",
     }
     r = await requests.get(f"{READECK_BASE_URL}/api/bookmarks/{bookmark_id}/article.md", headers=headers)
     r.raise_for_status()
-    article_text = r.text
-    await send_long_message(update, article_text)
-    logger.info(f"Fetched markdown for bookmark {bookmark_id}")
-
+    return r.text
+    
 
 async def epub_command(update: Update, context: CallbackContext) -> None:
     """Generate an epub of all unread bookmarks, send it, and archive them."""
