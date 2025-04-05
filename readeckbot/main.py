@@ -324,6 +324,46 @@ async def fetch_article_markdown(bookmark_id: str, token: str):
     return r.text
     
 
+async def fetch_article_epub(bookmark_id: str, token: str):
+    """Fetch the markdown of a bookmark by its ID."""
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "accept": "text/epub+zip",
+    }
+    r = await requests.get(f"{READECK_BASE_URL}/api/bookmarks/{bookmark_id}/article.epub", headers=headers)
+    r.raise_for_status()
+    return BytesIO(r.content)
+
+
+async def epub_handler(update: Update, context: CallbackContext) -> None:
+    """
+    Handle dynamic md_<bookmark_id> to fetch markdown.
+    """
+    query = update.callback_query
+    await query.answer()  # Acknowledge the callback
+
+    text = query.data.strip()
+   
+    _, bookmark_id = text.split("_")
+    
+    user_id = update.effective_user.id
+    token = USER_TOKEN_MAP.get(str(user_id))
+    if not token:
+        await query.message.reply_text(
+            "I don't have your Readeck token. Set it with /token <YOUR_TOKEN> or /register <password>."
+        )
+        return
+    epub = await fetch_article_epub(bookmark_id, token)
+
+    await query.message.reply_document(
+        document=epub,
+        filename=f"{bookmark_id}.epub",
+        caption="Here is your epub file.",
+    )
+    
+    
+
+
 async def epub_command(update: Update, context: CallbackContext) -> None:
     """Generate an epub of all unread bookmarks, send it, and archive them."""
     user_id = update.effective_user.id
@@ -579,6 +619,7 @@ def main():
     application.add_handler(CallbackQueryHandler(read_handler, pattern=r"^read_"))
 
     application.add_handler(CallbackQueryHandler(publish_handler, pattern=r"^pub_"))
+    application.add_handler(CallbackQueryHandler(epub_handler, pattern=r"^epub_"))
 
     
     # Non-command messages (likely bookmarks)
