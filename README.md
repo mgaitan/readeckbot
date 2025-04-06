@@ -56,6 +56,15 @@ LLM_SUMMARY_MAX_LENGTH=<int>     # optional , use if you want to customize the m
 
 > 📄 What’s a `.env` file? It's a simple file format for storing key=value pairs, that are loaded as [environment variables](https://en.wikipedia.org/wiki/Environment_variable) by apps. 
 
+> [!IMPORTANT]
+> Keep in mind that, initially, **we will be working with two different 'tokens'**.
+> 
+> On one hand, there's the one we set in the `.env` file for the **Telegram bot**; on the other, there's the authentication **token specific to Readeck**.
+> If you’re having issues when trying to use `/register`, it’s likely that you're missing the latter.
+> 
+> An easy way to resolve this is by going to the URL where you're hosting Readeck, then navigating to **Settings → API**.
+> There you can generate the authentication token and then use it in the Telegram chat with the command `/token <your_readeck_token>`.
+
 **5. Get your own Telegram bot token**
 
 To connect your bot to Telegram, you’ll need to create a bot and get its API token.
