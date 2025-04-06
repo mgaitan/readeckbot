@@ -81,6 +81,10 @@ READECK_DATA = os.getenv("READECK_DATA", None)
 USER_TOKEN_MAP = PersistentDict(".user_tokens.json")
 
 
+def escape_markdown_v2(text: str) -> str:
+    return re.sub(r"([_*\[\]()~`>#+\-=|{}.!])", r"\\\1", text)
+
+
 async def start(update: Update, context: CallbackContext) -> None:
     """Send a welcome message and log user ID."""
     user_id = update.effective_user.id
@@ -251,7 +255,7 @@ async def register_and_fetch_token(update: Update, username: str, password: str)
 
 async def reply_details(message: Message, token: str, bookmark_id: str):
     """Reply with details about the saved bookmark. Include a keyboard of actions"""
-    
+
     headers = {
         "Authorization": f"Bearer {token}",
         "accept": "application/json",
@@ -263,20 +267,18 @@ async def reply_details(message: Message, token: str, bookmark_id: str):
     logger.info(info)
     title = info.get("title", "No Title")
     url = info.get("url", "")
-    
+
     # Create an inline keyboard with actions pre-fills
     button_read = InlineKeyboardButton("Read", callback_data=f"read_{bookmark_id}")
     button_publish = InlineKeyboardButton("Publish", callback_data=f"pub_{bookmark_id}")
     button_epub = InlineKeyboardButton("Epub", callback_data=f"epub_{bookmark_id}")
     reply_markup = InlineKeyboardMarkup([[button_read, button_publish], [button_epub]])
 
-    
-    await message.reply_markdown_v2(f"[{title}]({url})", reply_markup=reply_markup)
-
+    await message.reply_markdown_v2(f"[{escape_markdown_v2(title)}]({url})", reply_markup=reply_markup)
 
 
 async def handle_detail_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    command = update.message.text 
+    command = update.message.text
     match = re.match(r"^/b_(\w+)", command)
     if not match:
         await update.message.reply_text("Invalid command format. Use /b_<bookmark_id>")
@@ -318,9 +320,9 @@ async def read_handler(update: Update, context: CallbackContext) -> None:
     await query.answer()  # Acknowledge the callback
 
     text = query.data.strip()
-   
+
     _, bookmark_id = text.split("_")
-    
+
     user_id = update.effective_user.id
     token = USER_TOKEN_MAP.get(str(user_id))
     if not token:
@@ -330,7 +332,7 @@ async def read_handler(update: Update, context: CallbackContext) -> None:
         return
     article_text = await fetch_article_markdown(bookmark_id, token)
     await send_long_message(query.message, article_text)
-    
+
 
 async def send_long_message(message: Message, text: str):
     # Telegram message limit ~4096 characters
@@ -348,9 +350,9 @@ async def fetch_article_markdown(bookmark_id: str, token: str):
     r = await requests.get(f"{READECK_BASE_URL}/api/bookmarks/{bookmark_id}/article.md", headers=headers)
     r.raise_for_status()
     return r.text
-    
 
-async def fetch_bookmarks(    
+
+async def fetch_bookmarks(
     token: str,
     author: str | None = None,
     is_archived: bool | None = None,
@@ -414,7 +416,6 @@ async def fetch_bookmarks(
     return response.json()
 
 
-
 async def fetch_article_epub(bookmark_id: str, token: str):
     """Fetch the markdown of a bookmark by its ID."""
     headers = {
@@ -434,9 +435,9 @@ async def epub_handler(update: Update, context: CallbackContext) -> None:
     await query.answer()  # Acknowledge the callback
 
     text = query.data.strip()
-   
+
     _, bookmark_id = text.split("_")
-    
+
     user_id = update.effective_user.id
     token = USER_TOKEN_MAP.get(str(user_id))
     if not token:
@@ -451,8 +452,6 @@ async def epub_handler(update: Update, context: CallbackContext) -> None:
         filename=f"{bookmark_id}.epub",
         caption="Here is your epub file.",
     )
-    
-    
 
 
 async def epub_command(update: Update, context: CallbackContext) -> None:
@@ -539,11 +538,9 @@ async def unarchived_command(update: Update, context: CallbackContext) -> None:
     await update.message.reply_markdown_v2(markdownify(message))
 
 
-
 async def search_command(update: Update, context: CallbackContext) -> None:
     """Search bookmarks"""
     user_id = update.effective_user.id
-    import ipdb;ipdb.set_trace()
     query = update.message.text.removeprefix("/search ").strip()
     if not query:
         await update.message.reply_text("Please provide a search query.")
@@ -556,7 +553,6 @@ async def search_command(update: Update, context: CallbackContext) -> None:
     message = format_list(bookmarks)
     # TODO format markdown
     await update.message.reply_markdown_v2(markdownify(message))
-
 
 
 # Nuevo diccionario persistente para almacenar cuentas Telegraph
@@ -708,13 +704,10 @@ def main():
     application.add_handler(CommandHandler("unarchived", unarchived_command))
     application.add_handler(CommandHandler("search", search_command))
 
-
     application.add_handler(CallbackQueryHandler(read_handler, pattern=r"^read_"))
     application.add_handler(CallbackQueryHandler(publish_handler, pattern=r"^pub_"))
     application.add_handler(CallbackQueryHandler(epub_handler, pattern=r"^epub_"))
 
-
-    
     # Non-command messages (likely bookmarks)
     application.add_handler(MessageHandler(filters.Regex(r"^/b_\w+"), handle_detail_command))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
