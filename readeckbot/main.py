@@ -108,7 +108,8 @@ async def help_command(update: Update, context: CallbackContext) -> None:
         "Example:\n"
         "https://example.com/article Interesting Article +news +tech\n\n"
         "I will save it to your Readeck account.\n"
-        "After saving, I'll show you a command /md_<bookmark_id> to get the article's markdown.\n\n"
+        "After saving, you can get the text, an epub or pusblish to Telegraph.  \n\n"
+        "/search <query> or /unarchived list current articles:\n"
         "To login or register, use:\n"
         "• /register <password>  (your Telegram user ID is used as username)"
     )
