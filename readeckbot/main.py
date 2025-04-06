@@ -266,9 +266,9 @@ async def reply_details(message: Message, token: str, bookmark_id: str):
     details.raise_for_status()
     info = details.json()
     logger.info(info)
-    title = info.get("title", "No Title")
-    url = info.get("url", "")
-
+    title = info.get("title") or info.get("url")
+    url = info.get("url")
+    
     # Create an inline keyboard with actions pre-fills
     button_read = InlineKeyboardButton("Read", callback_data=f"read_{bookmark_id}")
     button_publish = InlineKeyboardButton("Publish", callback_data=f"pub_{bookmark_id}")
