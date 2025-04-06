@@ -81,6 +81,22 @@ READECK_DATA = os.getenv("READECK_DATA", None)
 USER_TOKEN_MAP = PersistentDict(".user_tokens.json")
 
 
+# -- NEW: Attempt to enable LLM summarization
+LLM_ENABLED = False
+LLM_MODEL = os.getenv("LLM_MODEL", "gemini-2.0-flash")
+LLM_KEY = os.getenv("LLM_KEY")
+LLM_SUMMARY_MAX_LENGTH = int(os.getenv("LLM_SUMMARY_MAX_LENGTH", "2500"))
+
+try:
+    import llm  # Assuming you have `llm` installed
+    # If you have other environment checks for credentials, do them here.
+    # If all is good, enable:
+    LLM_ENABLED = True
+    logger.info(f"LLM is ENABLED using model '{LLM_MODEL}' with max length {LLM_SUMMARY_MAX_LENGTH}.")
+except ImportError:
+    logger.warning("llm library not installed. Summarization feature is DISABLED.")
+
+
 def escape_markdown_v2(text: str) -> str:
     return re.sub(r"([_*\[\]()~`>#+\-=|{}.!])", r"\\\1", text)
 
@@ -273,10 +289,60 @@ async def reply_details(message: Message, token: str, bookmark_id: str):
     button_read = InlineKeyboardButton("Read", callback_data=f"read_{bookmark_id}")
     button_publish = InlineKeyboardButton("Publish", callback_data=f"pub_{bookmark_id}")
     button_epub = InlineKeyboardButton("Epub", callback_data=f"epub_{bookmark_id}")
-    reply_markup = InlineKeyboardMarkup([[button_read, button_publish], [button_epub]])
 
+    # Conditionally add summarize button
+    if LLM_ENABLED:
+        button_summarize = InlineKeyboardButton("Summarize", callback_data=f"summarize_{bookmark_id}")
+        reply_markup = InlineKeyboardMarkup([
+            [button_read, button_publish],
+            [button_epub, button_summarize]
+        ])
+    else:
+        reply_markup = InlineKeyboardMarkup([
+            [button_read, button_publish],
+            [button_epub]
+        ])
     await message.reply_markdown_v2(f"[{escape_markdown_v2(title)}]({url})", reply_markup=reply_markup)
 
+
+
+async def summarize_handler(update: Update, context: CallbackContext) -> None:
+    """Callback for 'Summarize' button that uses llm to summarize the article."""
+    query = update.callback_query
+    await query.answer()  # Acknowledge the callback
+
+    # Parse bookmark_id from "summarize_<bookmark_id>"
+    _, bookmark_id = query.data.split("_", 1)
+    user_id = update.effective_user.id
+    token = USER_TOKEN_MAP.get(str(user_id))
+    
+    article_text = await fetch_article_markdown(bookmark_id, token)
+
+    # 2) Build a prompt instructing the LLM to summarize in the same language
+    #    and limit the summary to ~LLM_SUMMARY_MAX_LENGTH characters.
+    prompt = f"""Summarize the following article using the same language as the original text. 
+Please keep the summary under {LLM_SUMMARY_MAX_LENGTH} characters. 
+
+ARTICLE:
+{article_text}
+"""
+
+    try:
+        # 3) Call the llm library - usage will vary depending on your LLM setup
+        # For example, if `llm` has a .predict() function:
+        model = llm.get_async_model(LLM_MODEL)
+        summary = await model.prompt(
+            prompt=prompt,
+            key=LLM_KEY,
+        ).text()
+        # If your library is synchronous or has a different API, adjust accordingly.
+    except Exception as e:
+        logger.error(f"LLM summarization failed: {e}")
+        await query.message.reply_text("Could not summarize the article")
+        return
+
+    await query.message.reply_text(summary)
+    
 
 async def handle_detail_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     command = update.message.text
@@ -708,6 +774,8 @@ def main():
     application.add_handler(CallbackQueryHandler(read_handler, pattern=r"^read_"))
     application.add_handler(CallbackQueryHandler(publish_handler, pattern=r"^pub_"))
     application.add_handler(CallbackQueryHandler(epub_handler, pattern=r"^epub_"))
+    if LLM_ENABLED:
+        application.add_handler(CallbackQueryHandler(summarize_handler, pattern=r"^summarize_"))
 
     # Non-command messages (likely bookmarks)
     application.add_handler(MessageHandler(filters.Regex(r"^/b_\w+"), handle_detail_command))

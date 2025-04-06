@@ -26,6 +26,12 @@ Home = "https://github.com/mgaitan/readeckbot"
 [project.scripts]
 readeckbot = "readeckbot.main:main"
 
+[project.optional-dependencies]
+llm = [
+    "llm>=0.23",
+    "llm-gemini>=0.17",
+]
+
 [tool.ruff]
 line-length = 120
 

@@ -48,6 +48,10 @@ TELEGRAM_BOT_TOKEN=<your_bot_token>
 READECK_BASE_URL=http://127.0.0.1:8000
 READECK_CONFIG=./config.yaml      # optional, can be left out
 READECK_DATA=./data               # optional, use if you want to customize where data is stored
+
+LLM_KEY=<your_llm_key>           # optional, use if you want to enable LLM features
+LLM_MODEL=<model_name>           # optional, by default it's gemini-2.0-flash
+LLM_SUMMARY_MAX_LENGTH=<int>     # optional , use if you want to customize the max length of LLM summary
 ```
 
 > 📄 What’s a `.env` file? It's a simple file format for storing key=value pairs, that are loaded as [environment variables](https://en.wikipedia.org/wiki/Environment_variable) by apps. 
@@ -71,7 +75,7 @@ This project uses [`uv`](https://github.com/astral-sh/uv), a fast Python package
 Then in another terminal run the bot:
 
 ```bash
-uv run readeckbot
+uv run --extra llm readeckbot
 ```
 
 The first time it will install Python and the depenencies as needed and can take a bit, but 
@@ -82,7 +86,7 @@ You can now start chatting with your bot on Telegram using your own token.
 
 Happy hacking and happy reading! 📚🤖
 
-## Architecture 
+## Architecture
 
 
 ```mermaid
