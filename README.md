@@ -55,7 +55,7 @@ READECK_DATA=./data               # optional, use if you want to customize where
 > [!IMPORTANT]
 > Keep in mind that, initially, **we will be working with two different 'tokens'**.
 > 
-> On one hand, there's the one we set in the `.env` file for the **Telegram bot**, and then there's the authentication **token specific to Readeck**.
+> On one hand, there's the one we set in the `.env` file for the **Telegram bot**; on the other, there's the authentication **token specific to Readeck**.
 > If you’re having issues when trying to use `/register`, it’s likely that you're missing the latter.
 > 
 > An easy way to resolve this is by going to the URL where you're hosting Readeck, then navigating to **Settings → API**.
