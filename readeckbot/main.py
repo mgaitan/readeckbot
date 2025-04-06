@@ -3,6 +3,7 @@ import re
 import json
 import subprocess
 from pathlib import Path
+from typing import Any
 
 from io import BytesIO
 
@@ -15,7 +16,9 @@ from telegram.ext import (
     CallbackContext,
     ApplicationBuilder,
     CallbackQueryHandler,
+    ContextTypes,
 )
+
 
 from rich.logging import RichHandler
 from telegramify_markdown import markdownify
@@ -246,6 +249,45 @@ async def register_and_fetch_token(update: Update, username: str, password: str)
         logger.error("Token missing in auth response.")
 
 
+async def reply_details(message: Message, token: str, bookmark_id: str):
+    """Reply with details about the saved bookmark. Include a keyboard of actions"""
+    
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "accept": "application/json",
+        "content-type": "application/json",
+    }
+    details = await requests.get(f"{READECK_BASE_URL}/api/bookmarks/{bookmark_id}", headers=headers)
+    details.raise_for_status()
+    info = details.json()
+    logger.info(info)
+    title = info.get("title", "No Title")
+    url = info.get("url", "")
+    
+    # Create an inline keyboard with actions pre-fills
+    button_read = InlineKeyboardButton("Read", callback_data=f"read_{bookmark_id}")
+    button_publish = InlineKeyboardButton("Publish", callback_data=f"pub_{bookmark_id}")
+    button_epub = InlineKeyboardButton("Epub", callback_data=f"epub_{bookmark_id}")
+    reply_markup = InlineKeyboardMarkup([[button_read, button_publish], [button_epub]])
+
+    
+    await message.reply_markdown_v2(f"[{title}]({url})", reply_markup=reply_markup)
+
+
+
+async def handle_detail_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    command = update.message.text 
+    match = re.match(r"^/b_(\w+)", command)
+    if not match:
+        await update.message.reply_text("Invalid command format. Use /b_<bookmark_id>")
+        return
+
+    bookmark_id = match.group(1)
+    user_id = update.effective_user.id
+    token = USER_TOKEN_MAP.get(str(user_id))
+    await reply_details(update.message, token, bookmark_id)
+
+
 async def save_bookmark(update: Update, url: str, title: str, labels: list, token: str):
     """Save a bookmark to Readeck and return a link and the bookmark_id."""
     data = {"url": url}
@@ -262,26 +304,10 @@ async def save_bookmark(update: Update, url: str, title: str, labels: list, toke
 
     r = await requests.post(f"{READECK_BASE_URL}/api/bookmarks", json=data, headers=headers)
     r.raise_for_status()
-
+    data = r.json()
     bookmark_id = r.headers.get("Bookmark-Id")
-
-    details = await requests.get(f"{READECK_BASE_URL}/api/bookmarks/{bookmark_id}", headers=headers)
-    details.raise_for_status()
-    info = details.json()
-    logger.info(info)
-    real_title = info.get("title", "No Title")
-    url = info.get("url", "")
-
-    # Create an inline keyboard with actions pre-fills
-    button_read = InlineKeyboardButton("Read", callback_data=f"read_{bookmark_id}")
-    button_publish = InlineKeyboardButton("Publish", callback_data=f"pub_{bookmark_id}")
-    button_epub = InlineKeyboardButton("Epub", callback_data=f"epub_{bookmark_id}")
-    reply_markup = InlineKeyboardMarkup([[button_read, button_publish], [button_epub]])
-
-    message = "Saved"
-    await update.message.reply_markdown_v2(message, reply_markup=reply_markup)
-
-    logger.info(f"Saved bookmark '{real_title}' with ID {bookmark_id}")
+    await reply_details(update.message, token, bookmark_id)
+    logger.info(f"Saved bookmark with ID {bookmark_id}")
 
 
 async def read_handler(update: Update, context: CallbackContext) -> None:
@@ -323,6 +349,71 @@ async def fetch_article_markdown(bookmark_id: str, token: str):
     r.raise_for_status()
     return r.text
     
+
+async def fetch_bookmarks(    
+    token: str,
+    author: str | None = None,
+    is_archived: bool | None = None,
+    search: str | None = None,
+    site: str | None = None,
+    title: str | None = None,
+    type_: list[str] | None = None,
+    labels: str | None = None,
+    is_loaded: bool | None = None,
+    has_errors: bool | None = None,
+    has_labels: bool | None = None,
+    is_marked: bool | None = None,
+    range_start: str | None = None,
+    range_end: str | None = None,
+    read_status: list[str] | None = None,
+    updated_since: str | None = None,
+    bookmark_id: str | None = None,
+    collection: str | None = None,
+    limit: int | None = None,
+    offset: int | None = None,
+    sort: list[str] | None = None,
+) -> dict[str, Any]:
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "accept": "application/json",
+    }
+
+    # Prepare query parameters, skipping any that are None
+    params = {
+        "author": author,
+        "is_archived": is_archived,
+        "search": search,
+        "site": site,
+        "title": title,
+        "type": type_,
+        "labels": labels,
+        "is_loaded": is_loaded,
+        "has_errors": has_errors,
+        "has_labels": has_labels,
+        "is_marked": is_marked,
+        "range_start": range_start,
+        "range_end": range_end,
+        "read_status": read_status,
+        "updated_since": updated_since,
+        "id": bookmark_id,
+        "collection": collection,
+        "limit": limit,
+        "offset": offset,
+        "sort": sort,
+    }
+
+    # Remove keys with None values
+    filtered_params = {k: v for k, v in params.items() if v is not None}
+
+    response = await requests.get(
+        f"{READECK_BASE_URL}/api/bookmarks",
+        headers=headers,
+        params=filtered_params,
+    )
+    response.raise_for_status()
+    return response.json()
+
+
 
 async def fetch_article_epub(bookmark_id: str, token: str):
     """Fetch the markdown of a bookmark by its ID."""
@@ -425,47 +516,47 @@ async def epub_command(update: Update, context: CallbackContext) -> None:
         logger.info(f"Archived {bid} bookmark: {r.status_code}")
 
 
-async def list_command(update: Update, context: CallbackContext) -> None:
-    """List all unarchived bookmarks with title, site and dynamic /md_<bookmark_id>."""
+def format_list(bookmarks):
+    """Format a list of bookmarks for display."""
+    lines = []
+    for bookmark in bookmarks:
+        title = bookmark.get("title", "No Title")
+        url = bookmark.get("url", "")
+        lines.append(f"- [{title}]({url}) | /b_{bookmark['id']}")
+    return "\n".join(lines)
+
+
+async def unarchived_command(update: Update, context: CallbackContext) -> None:
+    """List all unarchived bookmarks"""
     user_id = update.effective_user.id
     token = USER_TOKEN_MAP.get(str(user_id))
-    if not token:
-        await update.message.reply_text(
-            "I don't have your Readeck token. Set it with /token <YOUR_TOKEN> or /register <password>."
-        )
-        return
-
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "accept": "application/json",
-    }
-    params = {
-        "author": "",
-        "is_archived": "false",
-        "labels": "",
-        "search": "",
-        "site": "",
-        "title": "",
-    }
-
-    response = await requests.get(f"{READECK_BASE_URL}/api/bookmarks", headers=headers, params=params)
-
-    bookmarks = response.json()
+    bookmarks = await fetch_bookmarks(token, is_archived=False)
     if not bookmarks:
         await update.message.reply_text("No unarchived bookmarks found.")
         return
-
-    lines = []
-    for bookmark in bookmarks:
-        logger.info(bookmark)
-        title = bookmark.get("title", "No Title")
-        url = bookmark.get("url", "")
-        site = bookmark.get("site", "Unknown")
-        bookmark_id = bookmark.get("id", "")
-        lines.append(f"- [{title}]({url}) | {site} | /md_{bookmark_id}")
-    message = "\n".join(lines)
+    message = format_list(bookmarks)
     # TODO format markdown
     await update.message.reply_markdown_v2(markdownify(message))
+
+
+
+async def search_command(update: Update, context: CallbackContext) -> None:
+    """Search bookmarks"""
+    user_id = update.effective_user.id
+    import ipdb;ipdb.set_trace()
+    query = update.message.text.removeprefix("/search ").strip()
+    if not query:
+        await update.message.reply_text("Please provide a search query.")
+        return
+    token = USER_TOKEN_MAP.get(str(user_id))
+    bookmarks = await fetch_bookmarks(token, search=query)
+    if not bookmarks:
+        await update.message.reply_text("No bookmarks found.")
+        return
+    message = format_list(bookmarks)
+    # TODO format markdown
+    await update.message.reply_markdown_v2(markdownify(message))
+
 
 
 # Nuevo diccionario persistente para almacenar cuentas Telegraph
@@ -614,15 +705,18 @@ def main():
     application.add_handler(CommandHandler("token", token_command))
     application.add_handler(CommandHandler("epub", epub_command))
 
-    application.add_handler(CommandHandler("list", list_command))
+    application.add_handler(CommandHandler("unarchived", unarchived_command))
+    application.add_handler(CommandHandler("search", search_command))
+
 
     application.add_handler(CallbackQueryHandler(read_handler, pattern=r"^read_"))
-
     application.add_handler(CallbackQueryHandler(publish_handler, pattern=r"^pub_"))
     application.add_handler(CallbackQueryHandler(epub_handler, pattern=r"^epub_"))
 
+
     
     # Non-command messages (likely bookmarks)
+    application.add_handler(MessageHandler(filters.Regex(r"^/b_\w+"), handle_detail_command))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     application.add_error_handler(error_handler)
