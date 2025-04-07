@@ -83,7 +83,7 @@ USER_TOKEN_MAP = PersistentDict(".user_tokens.json")
 
 # -- NEW: Attempt to enable LLM summarization
 LLM_ENABLED = False
-LLM_MODEL = os.getenv("LLM_MODEL", "gemini-2.0-flash")
+LLM_MODEL = os.getenv("LLM_MODEL", "gemini-2.0-flash-lite")
 LLM_KEY = os.getenv("LLM_KEY")
 LLM_SUMMARY_MAX_LENGTH = int(os.getenv("LLM_SUMMARY_MAX_LENGTH", "2500"))
 

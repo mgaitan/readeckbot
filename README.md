@@ -50,7 +50,7 @@ READECK_CONFIG=./config.yaml      # optional, can be left out
 READECK_DATA=./data               # optional, use if you want to customize where data is stored
 
 LLM_KEY=<your_llm_key>           # optional, use if you want to enable LLM features
-LLM_MODEL=<model_name>           # optional, by default it's gemini-2.0-flash
+LLM_MODEL=<model_name>           # optional, by default it's gemini-2.0-flash-lite
 LLM_SUMMARY_MAX_LENGTH=<int>     # optional , use if you want to customize the max length of LLM summary
 ```
 
