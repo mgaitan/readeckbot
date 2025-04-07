@@ -320,7 +320,7 @@ async def summarize_handler(update: Update, context: CallbackContext) -> None:
 
     # 2) Build a prompt instructing the LLM to summarize in the same language
     #    and limit the summary to ~LLM_SUMMARY_MAX_LENGTH characters.
-    prompt = f"""Summarize the following article using the same language as the original text. 
+    prompt = f"""Summarize the following article. You must respect the same language as the original text. 
 Please keep the summary under {LLM_SUMMARY_MAX_LENGTH} characters. 
 
 ARTICLE:
