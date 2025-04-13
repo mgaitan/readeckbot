@@ -219,7 +219,7 @@ async def register_and_fetch_token(update: Update, username: str, password: str)
     Then obtain the token via the API.
     """
     command = (
-        ["readeck", "user"] + (["-config", READECK_CONFIG] if READECK_CONFIG else []) + ["-u", username, "-p", password]
+        ["./readeck", "user"] + (["-config", READECK_CONFIG] if READECK_CONFIG else []) + ["-u", username, "-p", password]
     )
     logger.info(f"Attempting to register user '{username}' using CLI")
     logger.debug(f"CLI command: {command}")

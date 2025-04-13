@@ -46,8 +46,8 @@ Create a file named `.env` in the project root. This file stores config variable
 ```env
 TELEGRAM_BOT_TOKEN=<your_bot_token>
 READECK_BASE_URL=http://127.0.0.1:8000
-READECK_CONFIG=./config.yaml      # optional, can be left out
-READECK_DATA=./data               # optional, use if you want to customize where data is stored
+READECK_CONFIG=home/smething/config.toml      # optional, can be left out. Use the full path
+READECK_DATA=home/something/data               # optional, use if you want to customize where data is stored. Use the full path
 
 LLM_KEY=<your_llm_key>           # optional, use if you want to enable LLM features
 LLM_MODEL=<model_name>           # optional, by default it's gemini-2.0-flash-lite
