@@ -4,11 +4,12 @@ import json
 import subprocess
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from io import BytesIO
 
 from dotenv import load_dotenv
-from telegram import Update, Message, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, Message, MessageEntity, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     CommandHandler,
     MessageHandler,
@@ -18,7 +19,6 @@ from telegram.ext import (
     CallbackQueryHandler,
     ContextTypes,
 )
-
 
 from rich.logging import RichHandler
 from telegramify_markdown import markdownify
@@ -146,6 +146,17 @@ async def extract_url_title_labels(text: str):
     return url, (title if title else None), labels
 
 
+def _normalize_url(url: str) -> str:
+    """
+    Guarantee that the URL starts with a scheme and
+    remove trailing punctuation such as commas or periods.
+    """
+    url = url.strip('.,:;!?)]}')
+    if not urlparse(url).scheme:
+        url = f'https://{url}'
+    return url
+
+
 async def handle_message(update: Update, context: CallbackContext) -> None:
     """
     Handle non-command text messages:
@@ -153,27 +164,18 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
     - Otherwise, provide guidance.
     """
     user_id = update.effective_user.id
-    text = update.message.text.strip()
-
+    
     token = USER_TOKEN_MAP.get(str(user_id))
-    if not token:
-        await update.message.reply_text(
-            "I don't have your Readeck token. Set it with /token <YOUR_TOKEN> or /register <password>."
-        )
-        return
 
-    if not re.search(r"https?://", text):
-        await update.message.reply_text(
-            "I don't recognize this input.\n"
-            "After saving a bookmark, use the provided /md_<bookmark_id> command to view its markdown."
-        )
-    else:
-        # Check if the text contains a URL
-        for line in text.splitlines():
-            url, title, labels = await extract_url_title_labels(line)
-            if url:
-                await save_bookmark(update, url, title, labels, token)
+    for ent in update.message.entities:
+        if ent.type == MessageEntity.TEXT_LINK:
+            url = ent.url
+        elif ent.type == MessageEntity.URL:
+            url = _normalize_url(update.message.parse_entity(ent))
+        else:
+            continue
 
+        await save_bookmark(update, url, token)
 
 async def register_command(update: Update, context: CallbackContext) -> None:
     """
@@ -357,23 +359,16 @@ async def handle_detail_command(update: Update, context: ContextTypes.DEFAULT_TY
     await reply_details(update.message, token, bookmark_id)
 
 
-async def save_bookmark(update: Update, url: str, title: str, labels: list, token: str):
+async def save_bookmark(update: Update, url: str, token: str):
     """Save a bookmark to Readeck and return a link and the bookmark_id."""
-    data = {"url": url}
-    if title:
-        data["title"] = title
-    if labels:
-        data["labels"] = labels
-
     headers = {
         "Authorization": f"Bearer {token}",
         "accept": "application/json",
         "content-type": "application/json",
     }
 
-    r = await requests.post(f"{READECK_BASE_URL}/api/bookmarks", json=data, headers=headers)
+    r = await requests.post(f"{READECK_BASE_URL}/api/bookmarks", json={"url": url}, headers=headers)
     r.raise_for_status()
-    data = r.json()
     bookmark_id = r.headers.get("Bookmark-Id")
     await reply_details(update.message, token, bookmark_id)
     logger.info(f"Saved bookmark with ID {bookmark_id}")
