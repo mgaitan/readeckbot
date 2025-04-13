@@ -89,6 +89,7 @@ LLM_SUMMARY_MAX_LENGTH = int(os.getenv("LLM_SUMMARY_MAX_LENGTH", "2500"))
 
 try:
     import llm  # Assuming you have `llm` installed
+
     # If you have other environment checks for credentials, do them here.
     # If all is good, enable:
     LLM_ENABLED = True
@@ -101,34 +102,18 @@ def escape_markdown_v2(text: str) -> str:
     return re.sub(r"([_*\[\]()~`>#+\-=|{}.!])", r"\\\1", text)
 
 
-async def start(update: Update, context: CallbackContext) -> None:
-    """Send a welcome message and log user ID."""
-    user_id = update.effective_user.id
-    logger.info(f"User started the bot. user_id={user_id}")
+async def help_command(update: Update, context: CallbackContext) -> None:
     await update.message.reply_text(
         "Hi! Send me a URL to save it on Readeck.\n\n"
-        "You can also specify a title and tags like:\n"
-        "https://example.com Interesting Article +news +tech\n\n"
         "To configure your Readeck credentials use one of:\n"
         "• /token <YOUR_READECK_TOKEN>\n"
-        "• /register <password>  (your Telegram user ID is used as username)\n\n"
-        "After saving a bookmark, I'll give you a custom command like /md_<bookmark_id> "
-        "to directly fetch its markdown."
-    )
-
-
-async def help_command(update: Update, context: CallbackContext) -> None:
-    """Show help text."""
-    await update.message.reply_text(
-        "Send me a URL along with an optional +labels.\n"
-        "Example:\n"
-        "https://example.com/article Interesting Article +news +tech\n\n"
-        "I will save it to your Readeck account.\n"
-        "After saving, you can get the text, an epub or pusblish to Telegraph.  \n\n"
-        "/search <query> or /unarchived list current articles:\n"
-        "To login or register, use:\n"
         "• /register <password>  (your Telegram user ID is used as username)"
     )
+
+
+async def start(update: Update, context: CallbackContext) -> None:
+    # /start behaves exactly like /help
+    await help_command(update, context)
 
 
 async def extract_url_title_labels(text: str):
@@ -151,9 +136,9 @@ def _normalize_url(url: str) -> str:
     Guarantee that the URL starts with a scheme and
     remove trailing punctuation such as commas or periods.
     """
-    url = url.strip('.,:;!?)]}')
+    url = url.strip(".,:;!?)]}")
     if not urlparse(url).scheme:
-        url = f'https://{url}'
+        url = f"https://{url}"
     return url
 
 
@@ -164,7 +149,7 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
     - Otherwise, provide guidance.
     """
     user_id = update.effective_user.id
-    
+
     token = USER_TOKEN_MAP.get(str(user_id))
 
     for ent in update.message.entities:
@@ -176,6 +161,7 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
             continue
 
         await save_bookmark(update, url, token)
+
 
 async def register_command(update: Update, context: CallbackContext) -> None:
     """
@@ -286,7 +272,7 @@ async def reply_details(message: Message, token: str, bookmark_id: str):
     logger.info(info)
     title = info.get("title") or info.get("url")
     url = info.get("url")
-    
+
     # Create an inline keyboard with actions pre-fills
     button_read = InlineKeyboardButton("Read", callback_data=f"read_{bookmark_id}")
     button_publish = InlineKeyboardButton("Publish", callback_data=f"pub_{bookmark_id}")
@@ -295,17 +281,10 @@ async def reply_details(message: Message, token: str, bookmark_id: str):
     # Conditionally add summarize button
     if LLM_ENABLED:
         button_summarize = InlineKeyboardButton("Summarize", callback_data=f"summarize_{bookmark_id}")
-        reply_markup = InlineKeyboardMarkup([
-            [button_read, button_publish],
-            [button_epub, button_summarize]
-        ])
+        reply_markup = InlineKeyboardMarkup([[button_read, button_publish], [button_epub, button_summarize]])
     else:
-        reply_markup = InlineKeyboardMarkup([
-            [button_read, button_publish],
-            [button_epub]
-        ])
+        reply_markup = InlineKeyboardMarkup([[button_read, button_publish], [button_epub]])
     await message.reply_markdown_v2(f"[{escape_markdown_v2(title)}]({url})", reply_markup=reply_markup)
-
 
 
 async def summarize_handler(update: Update, context: CallbackContext) -> None:
@@ -317,7 +296,7 @@ async def summarize_handler(update: Update, context: CallbackContext) -> None:
     _, bookmark_id = query.data.split("_", 1)
     user_id = update.effective_user.id
     token = USER_TOKEN_MAP.get(str(user_id))
-    
+
     article_text = await fetch_article_markdown(bookmark_id, token)
 
     # 2) Build a prompt instructing the LLM to summarize in the same language
@@ -344,7 +323,7 @@ ARTICLE:
         return
 
     await query.message.reply_text(summary)
-    
+
 
 async def handle_detail_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     command = update.message.text
