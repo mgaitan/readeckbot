@@ -89,6 +89,7 @@ LLM_SUMMARY_MAX_LENGTH = int(os.getenv("LLM_SUMMARY_MAX_LENGTH", "2500"))
 
 try:
     import llm  # Assuming you have `llm` installed
+
     # If you have other environment checks for credentials, do them here.
     # If all is good, enable:
     LLM_ENABLED = True
@@ -286,7 +287,7 @@ async def reply_details(message: Message, token: str, bookmark_id: str):
     logger.info(info)
     title = info.get("title") or info.get("url")
     url = info.get("url")
-    
+
     # Create an inline keyboard with actions pre-fills
     button_read = InlineKeyboardButton("Read", callback_data=f"read_{bookmark_id}")
     button_publish = InlineKeyboardButton("Publish", callback_data=f"pub_{bookmark_id}")
@@ -295,17 +296,10 @@ async def reply_details(message: Message, token: str, bookmark_id: str):
     # Conditionally add summarize button
     if LLM_ENABLED:
         button_summarize = InlineKeyboardButton("Summarize", callback_data=f"summarize_{bookmark_id}")
-        reply_markup = InlineKeyboardMarkup([
-            [button_read, button_publish],
-            [button_epub, button_summarize]
-        ])
+        reply_markup = InlineKeyboardMarkup([[button_read, button_publish], [button_epub, button_summarize]])
     else:
-        reply_markup = InlineKeyboardMarkup([
-            [button_read, button_publish],
-            [button_epub]
-        ])
+        reply_markup = InlineKeyboardMarkup([[button_read, button_publish], [button_epub]])
     await message.reply_markdown_v2(f"[{escape_markdown_v2(title)}]({url})", reply_markup=reply_markup)
-
 
 
 async def summarize_handler(update: Update, context: CallbackContext) -> None:
@@ -317,7 +311,7 @@ async def summarize_handler(update: Update, context: CallbackContext) -> None:
     _, bookmark_id = query.data.split("_", 1)
     user_id = update.effective_user.id
     token = USER_TOKEN_MAP.get(str(user_id))
-    
+
     article_text = await fetch_article_markdown(bookmark_id, token)
 
     # 2) Build a prompt instructing the LLM to summarize in the same language
@@ -344,7 +338,7 @@ ARTICLE:
         return
 
     await query.message.reply_text(summary)
-    
+
 
 async def handle_detail_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     command = update.message.text
@@ -391,13 +385,13 @@ async def read_handler(update: Update, context: CallbackContext) -> None:
     text = query.data.strip()
 
     try:
-        _, bookmark_id, chunk_n  = text.split("_")
+        _, bookmark_id, chunk_n = text.split("_")
         chunk_n = int(chunk_n)
     except ValueError:
         # first page: it has no chunk suffix
-        _, bookmark_id  = text.split("_")
+        _, bookmark_id = text.split("_")
         chunk_n = 0
-    
+
     user_id = update.effective_user.id
     token = USER_TOKEN_MAP.get(str(user_id))
     if not token:
@@ -406,10 +400,10 @@ async def read_handler(update: Update, context: CallbackContext) -> None:
         )
     article_text = await fetch_article_markdown(bookmark_id, token)
     chunk_size = 2000
-    
+
     # Split the article text into chunks of 4000 characters
-    article_chunks = [article_text[i:i+chunk_size] for i in range(0, len(article_text), chunk_size)]
-    # TODO : implements a smarter chunker . Do not split in the middle of a word. 
+    article_chunks = [article_text[i : i + chunk_size] for i in range(0, len(article_text), chunk_size)]
+    # TODO : implements a smarter chunker . Do not split in the middle of a word.
 
     chunk = article_chunks[chunk_n]
 
@@ -422,10 +416,7 @@ async def read_handler(update: Update, context: CallbackContext) -> None:
         # TODO : If it's the last page, add a button "archive". See issue #6
         # https://github.com/mgaitan/readeckbot/issues/6
 
-
     await query.message.reply_text(chunk, reply_markup=reply_markup)
-   
-
 
 
 async def fetch_article_markdown(bookmark_id: str, token: str):
