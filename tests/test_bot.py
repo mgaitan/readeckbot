@@ -36,10 +36,10 @@ async def test_bot_start_command(telegram_bot: Bot, chat_id: str, send_telegram_
 
 
 @pytest.mark.asyncio
-async def test_bot_token_command(telegram_bot: Bot, chat_id: str, readeck_token: str):
+async def test_bot_token_command(telegram_bot: Bot, chat_id: str, readeck_token: str, send_telegram_message: str):
     """Test the /token command with the real bot"""
-    message: Message = await telegram_bot.send_message(chat_id=chat_id, text=f"/token {readeck_token}")
 
+    message_id = send_telegram_message(f"/token {readeck_token}")
     bot_response = await get_bot_response(telegram_bot, message.message_id)
 
     assert bot_response is not None, "No bot response found for the /token command"
