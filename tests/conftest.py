@@ -1,9 +1,15 @@
 import os
 import subprocess
 import pytest
+import threading
 import time
 import requests
+
+# Telegram namespace conflict!
+# https://github.com/alexander-akhmetov/python-telegram/issues/207
 from telegram import Bot
+from telegram.client import Telegram
+
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -13,7 +19,21 @@ TEST_TELEGRAM_BOT_TOKEN = os.getenv("TEST_TELEGRAM_BOT_TOKEN")
 TEST_CHAT_ID = os.getenv("TEST_CHAT_ID")
 TEST_READECK_BASE_URL = os.getenv("TEST_READECK_BASE_URL")
 
-if not TEST_TELEGRAM_BOT_TOKEN or not TEST_CHAT_ID or not TEST_READECK_BASE_URL:
+TEST_API_ID = os.getenv("TEST_API_ID")
+TEST_API_HASH = os.getenv("TEST_API_HASH")
+TEST_PHONE = os.getenv("TEST_PHONE")
+TEST_DATABASE_ENCRYPTION_KEY = os.getenv("TEST_DATABASE_ENCRYPTION_KEY")
+
+
+if (
+    not TEST_TELEGRAM_BOT_TOKEN
+    or not TEST_CHAT_ID
+    or not TEST_READECK_BASE_URL
+    or not TEST_API_ID
+    or not TEST_API_HASH
+    or not TEST_PHONE
+    or not TEST_DATABASE_ENCRYPTION_KEY
+):
     raise ValueError("Some TEST environment variables are not set")
 
 
@@ -65,9 +85,9 @@ def readeck_server(readeck_temp_dir):
     port = TEST_READECK_BASE_URL.split(":")[-1]
     # Start the server in the shared temp directory
     process = subprocess.Popen(
-        ["readeck", "serve", "--port", f"{port}"], 
-        cwd=readeck_temp_dir, 
-        stdout=subprocess.PIPE, 
+        ["readeck", "serve", "--port", f"{port}"],
+        cwd=readeck_temp_dir,
+        stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
 
@@ -129,3 +149,71 @@ async def telegram_bot(bot_token: str):
     yield bot
     # Clean up
     await bot.close()
+
+
+@pytest.fixture(scope="session")
+def send_telegram_message():
+    """Fixture to provide the send_telegram_message function"""
+
+    def _send(text: str) -> bool:
+        """
+        Send a message to a specific chat using the configured Telegram account.
+
+        Args:
+            text (str): The message text to send
+        """
+        chat_id = TEST_CHAT_ID.split(":")[0]  # Using BOT_ID to identify the chat
+
+        try:
+            # Initialize the Telegram client
+            # Namespace Conflict!
+            tg = Telegram(
+                api_id=TEST_API_ID,
+                api_hash=TEST_API_HASH,
+                phone=TEST_PHONE,
+                database_encryption_key=TEST_DATABASE_ENCRYPTION_KEY,
+            )
+
+            # Login to the account
+            login_result = tg.login()
+            # Get chats to ensure proper initialization
+            get_chats_result = tg.get_chats()
+            get_chats_result.wait()
+
+            if get_chats_result.error:
+                return False
+
+            # Send the message
+            send_message_result = tg.send_message(
+                chat_id=chat_id,
+                text=text,
+            )
+            send_message_result.wait()
+
+            # Create event for message confirmation
+            message_has_been_sent = threading.Event()
+            new_message_id = None
+
+            def update_message_send_succeeded_handler(update):
+                nonlocal new_message_id
+                if update["old_message_id"] == send_message_result.update["id"]:
+                    new_message_id = update["message"]["id"]
+                    message_has_been_sent.set()
+
+            # Add handler for message confirmation
+            tg.add_update_handler("updateMessageSendSucceeded", update_message_send_succeeded_handler)
+
+            # Wait for message confirmation
+            message_has_been_sent.wait(timeout=60)
+
+            return new_message_id
+
+        except Exception as e:
+            return e
+
+        finally:
+            # Always stop the client
+            if "tg" in locals():
+                tg.stop()
+
+    return _send

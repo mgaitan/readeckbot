@@ -25,11 +25,11 @@ async def get_bot_response(bot: Bot, message_id: int) -> Optional[str]:
 
 
 @pytest.mark.asyncio
-async def test_bot_start_command(telegram_bot: Bot, chat_id: str):
+async def test_bot_start_command(telegram_bot: Bot, chat_id: str, send_telegram_message: str):
     """Test the /start command with the real bot"""
-    message: Message = await telegram_bot.send_message(chat_id=chat_id, text="/start")
 
-    bot_response = await get_bot_response(telegram_bot, message.message_id)
+    message_id = send_telegram_message("/start")
+    bot_response = await get_bot_response(telegram_bot, message_id)
 
     assert bot_response is not None, "No bot response found for the /start command"
     assert "Hi! Send me a URL to save it on Readeck" in bot_response
