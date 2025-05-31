@@ -26,6 +26,7 @@ from ytelegraph import TelegraphAPI
 import logging
 
 from . import requests
+from .helpers import chunker
 from .md_to_dom import md_to_dom
 
 
@@ -306,8 +307,8 @@ async def summarize_handler(update: Update, context: CallbackContext) -> None:
 
     # 2) Build a prompt instructing the LLM to summarize in the same language
     #    and limit the summary to ~LLM_SUMMARY_MAX_LENGTH characters.
-    prompt = f"""Summarize the following article. You must respect the same language as the original text. 
-Please keep the summary under {LLM_SUMMARY_MAX_LENGTH} characters. 
+    prompt = f"""Summarize the following article. You must respect the same language as the original text.
+Please keep the summary under {LLM_SUMMARY_MAX_LENGTH} characters.
 
 ARTICLE:
 {article_text}
@@ -382,12 +383,7 @@ async def read_handler(update: Update, context: CallbackContext) -> None:
             "I don't have your Readeck token. Set it with /token <YOUR_TOKEN> or /register <password>."
         )
     article_text = await fetch_article_markdown(bookmark_id, token)
-    chunk_size = 2000
-
-    # Split the article text into chunks of 4000 characters
-    article_chunks = [article_text[i : i + chunk_size] for i in range(0, len(article_text), chunk_size)]
-    # TODO : implements a smarter chunker . Do not split in the middle of a word.
-
+    article_chunks = chunker(article_text)
     chunk = article_chunks[chunk_n]
 
     if chunk_n < len(article_chunks) - 1:
@@ -395,11 +391,33 @@ async def read_handler(update: Update, context: CallbackContext) -> None:
         reply_markup = InlineKeyboardMarkup([[button_read]])
     else:
         # Last chunk, no next button
-        reply_markup = None
-        # TODO : If it's the last page, add a button "archive". See issue #6
-        # https://github.com/mgaitan/readeckbot/issues/6
+        button_archive = InlineKeyboardButton("Archive", callback_data=f"archive_{bookmark_id}")
+        reply_markup = InlineKeyboardMarkup([[button_archive]])
 
     await query.message.reply_text(chunk, reply_markup=reply_markup)
+
+
+async def archive_bookmark(update: Update, context: CallbackContext) -> None:
+    """Archive a bookmark by its ID."""
+    user_id = update.effective_user.id
+    token = USER_TOKEN_MAP.get(str(user_id))
+    headers = {
+            "Authorization": f"Bearer {token}",
+            "content-type": "application/json",
+    }
+    query = update.callback_query
+    query.answer()
+
+    # Bookmark_id issue here: getting the bookmark_id again
+    data = query.data  # 'archive_PXNJqD7KvTUdVhwVDjuXSr'
+    _, bookmark_id = data.split("_", 1)  # extract 'PXNJqD7KvTUdVhwVDjuXSr'
+
+    patch_url = f"{READECK_BASE_URL}/api/bookmarks/{bookmark_id}"
+    payload = {"is_archived":True}
+    response = await requests.patch(patch_url, headers=headers, json=payload)
+    response.raise_for_status()
+    logger.info(f"Archived bookmark {bookmark_id} succesfully.")
+    await query.message.reply_text("This bookmark has been archived.")
 
 
 async def fetch_article_markdown(bookmark_id: str, token: str):
@@ -768,6 +786,7 @@ def main():
     application.add_handler(CallbackQueryHandler(read_handler, pattern=r"^read_"))
     application.add_handler(CallbackQueryHandler(publish_handler, pattern=r"^pub_"))
     application.add_handler(CallbackQueryHandler(epub_handler, pattern=r"^epub_"))
+    application.add_handler(CallbackQueryHandler(archive_bookmark, pattern=r"^archive_"))
     if LLM_ENABLED:
         application.add_handler(CallbackQueryHandler(summarize_handler, pattern=r"^summarize_"))
 
