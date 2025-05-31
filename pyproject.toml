@@ -40,4 +40,5 @@ line-length = 120
 dev = [
     "ipdb>=0.13.13",
     "pytest>=8.3.4",
+    "ruff>=0.11.12",
 ]
