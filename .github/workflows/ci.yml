@@ -21,7 +21,6 @@ jobs:
         run: uv run ruff format --check
 
   test:
-    needs: lint
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -30,4 +29,4 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: astral-sh/setup-uv@v6
-      - run: UV_PYTHON=${{ matrix.python-version }} uv run pytest
+      - run: uv run -p ${{ matrix.python-version }} pytest
