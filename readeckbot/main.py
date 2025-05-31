@@ -402,8 +402,8 @@ async def archive_bookmark(update: Update, context: CallbackContext) -> None:
     user_id = update.effective_user.id
     token = USER_TOKEN_MAP.get(str(user_id))
     headers = {
-            "Authorization": f"Bearer {token}",
-            "content-type": "application/json",
+        "Authorization": f"Bearer {token}",
+        "content-type": "application/json",
     }
     query = update.callback_query
     query.answer()
@@ -413,7 +413,7 @@ async def archive_bookmark(update: Update, context: CallbackContext) -> None:
     _, bookmark_id = data.split("_", 1)  # extract 'PXNJqD7KvTUdVhwVDjuXSr'
 
     patch_url = f"{READECK_BASE_URL}/api/bookmarks/{bookmark_id}"
-    payload = {"is_archived":True}
+    payload = {"is_archived": True}
     response = await requests.patch(patch_url, headers=headers, json=payload)
     response.raise_for_status()
     logger.info(f"Archived bookmark {bookmark_id} succesfully.")
