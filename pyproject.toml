@@ -7,38 +7,29 @@ name = "readeckbot"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-  "python-telegram-bot",
-  "httpx",
-  "rich",
-  "python-dotenv",
-  "telegramify-markdown",
-  "your-telegraph",
-  "mistletoe",
+    "python-telegram-bot",
+    "httpx",
+    "rich",
+    "python-dotenv",
+    "telegramify-markdown",
+    "your-telegraph",
+    "mistletoe",
 ]
-authors = [
-    {name = "Martín Gaitán", email = "gaitan@gmail.com"}
-]
+authors = [{ name = "Martín Gaitán", email = "gaitan@gmail.com" }]
 dynamic = ["version", "description"]
 
 [project.urls]
 Home = "https://github.com/mgaitan/readeckbot"
 
 [project.scripts]
-readeckbot = "readeckbot.main:main"
+readeckbot = "readeckbot.__main__:main"
 
 [project.optional-dependencies]
-llm = [
-    "llm>=0.23",
-    "llm-gemini>=0.17",
-]
+llm = ["llm>=0.23", "llm-gemini>=0.17"]
 
 [tool.ruff]
 line-length = 120
 
 
 [dependency-groups]
-dev = [
-    "ipdb>=0.13.13",
-    "pytest>=8.3.4",
-    "ruff>=0.11.12",
-]
+dev = ["ipdb>=0.13.13", "pytest>=8.3.4", "ruff>=0.11.12"]

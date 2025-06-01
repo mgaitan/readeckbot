@@ -1,7 +1,10 @@
-from readeckbot.md_to_dom import md_to_dom
+import pytest
+from readeckbot.telegraph.md_to_dom import md_to_dom
 
 
-content = """
+@pytest.fixture
+def content():
+    return """
 ## Markdown example
 
 - **Bold text:** Use `**text**` to make text **bold**.
@@ -29,7 +32,7 @@ Enjoy testing your parser with this rich variety of inline formatting!
 """
 
 
-def test_md_to_dom():
+def test_md_to_dom(content):
     assert md_to_dom(content) == [
         {"tag": "h4", "children": ["Markdown example"]},
         {
