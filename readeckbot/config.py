@@ -7,9 +7,6 @@ from .helpers import PersistentDict
 # Load environment variables
 load_dotenv()
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-if not TELEGRAM_BOT_TOKEN:
-    raise ValueError("You must provide a TELEGRAM_BOT_TOKEN in your .env")
-
 READECK_BASE_URL = os.getenv("READECK_BASE_URL", "http://localhost:8000")
 READECK_CONFIG = os.getenv("READECK_CONFIG", None)
 READECK_DATA = os.getenv("READECK_DATA", None)
