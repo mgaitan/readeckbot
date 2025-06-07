@@ -35,7 +35,7 @@ async def is_admin_user(token: str) -> bool:
     }
     try:
         resp = await requests.get(f"{READECK_BASE_URL}/api/profile", headers=headers)
-        data = resp.json()
+        data = await resp.json()
         roles = data.get("provider", {}).get("roles", [])
         return "admin" in roles
     except Exception:
