@@ -17,10 +17,14 @@ from telegram.ext import (
 from telegramify_markdown import markdownify
 
 
-from . import requests, telegraph, config
+from . import requests, telegraph, config, __version__
 from .log import logger
 from .helpers import chunker, escape_markdown_v2, normalize_url
-from .readeck_client import fetch_bookmarks, fetch_article_epub, save_bookmark, fetch_article_markdown, archive_bookmark
+from .readeck_client import fetch_bookmarks, fetch_article_epub, save_bookmark, fetch_article_markdown, archive_bookmark, get_readeck_version, is_admin_user
+
+
+import os
+import sys
 
 try:
     import llm
@@ -41,13 +45,42 @@ async def help_command(update: Update, context: CallbackContext) -> None:
         "Hi! Send me a URL to save it on Readeck.\n\n"
         "To configure your Readeck credentials use one of:\n"
         "• /token <YOUR_READECK_TOKEN>\n"
-        "• /register <password>  (your Telegram user ID is used as username)"
+        "• /register <password>  (your Telegram user ID is used as username)\n\n"
+        "Other commands:\n"
+        "• /version - show the bot version\n"
+        "• /restart - restart the bot (admin only, for upgrades)"
     )
 
 
 async def start(update: Update, context: CallbackContext) -> None:
     # /start behaves exactly like /help
     await help_command(update, context)
+
+async def version_command(update: Update, context: CallbackContext) -> None:
+    """Reply with the current bot and readeck backend version."""
+    readeck_version = get_readeck_version()
+    await update.message.reply_text(
+        f"Readeckbot version: {__version__}\n"
+        f"{readeck_version}"
+    )
+
+async def restart_command(update: Update, context: CallbackContext) -> None:
+    """Restart the bot process (systemd will relaunch it, useful for upgrades). Only admins can use this."""
+    user_id = update.effective_user.id
+    token = config.USER_TOKEN_MAP.get(str(user_id))
+    if not token:
+        await update.message.reply_text("You must register your Readeck token to use this command.")
+        return
+    if not await is_admin_user(token):
+        await update.message.reply_text("You must be an admin in Readeck to restart the bot.")
+        logger.warning(f"Unauthorized restart attempt by user_id={user_id}")
+        return
+    await update.message.reply_text("Restarting bot...")
+    logger.info(f"Bot restart requested by admin user_id={user_id}")
+    # Flush logs and exit process
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os._exit(0)
 
 
 async def handle_message(update: Update, context: CallbackContext) -> None:
@@ -478,6 +511,8 @@ def main():
     application.add_handler(CommandHandler("register", register_command))
     application.add_handler(CommandHandler("token", token_command))
     application.add_handler(CommandHandler("epub", epub_command))
+    application.add_handler(CommandHandler("version", version_command))
+    application.add_handler(CommandHandler("restart", restart_command))
 
     application.add_handler(CommandHandler("unarchived", unarchived_command))
     application.add_handler(CommandHandler("search", search_command))
