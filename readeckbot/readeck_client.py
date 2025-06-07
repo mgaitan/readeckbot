@@ -4,7 +4,6 @@ import subprocess
 
 from .config import READECK_BASE_URL
 from . import requests
-import json
 
 
 def get_readeck_version() -> str:
@@ -12,17 +11,11 @@ def get_readeck_version() -> str:
     Returns the version string of the installed readeck binary.
     """
     try:
-        result = subprocess.run(
-            ["readeck", "version"],
-            capture_output=True,
-            text=True,
-            check=True
-        )
+        result = subprocess.run(["readeck", "version"], capture_output=True, text=True, check=True)
         # Expected output: "readeck version: 0.19.2"
         return result.stdout.strip()
     except Exception as e:
         return f"Could not determine readeck version: {e}"
-
 
 
 async def is_admin_user(token: str) -> bool:
@@ -40,6 +33,7 @@ async def is_admin_user(token: str) -> bool:
         return "admin" in roles
     except Exception:
         return False
+
 
 async def fetch_bookmarks(
     token: str,

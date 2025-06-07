@@ -20,7 +20,15 @@ from telegramify_markdown import markdownify
 from . import requests, telegraph, config, __version__
 from .log import logger
 from .helpers import chunker, escape_markdown_v2, normalize_url
-from .readeck_client import fetch_bookmarks, fetch_article_epub, save_bookmark, fetch_article_markdown, archive_bookmark, get_readeck_version, is_admin_user
+from .readeck_client import (
+    fetch_bookmarks,
+    fetch_article_epub,
+    save_bookmark,
+    fetch_article_markdown,
+    archive_bookmark,
+    get_readeck_version,
+    is_admin_user,
+)
 
 
 import os
@@ -56,13 +64,12 @@ async def start(update: Update, context: CallbackContext) -> None:
     # /start behaves exactly like /help
     await help_command(update, context)
 
+
 async def version_command(update: Update, context: CallbackContext) -> None:
     """Reply with the current bot and readeck backend version."""
     readeck_version = get_readeck_version()
-    await update.message.reply_text(
-        f"Readeckbot version: {__version__}\n"
-        f"{readeck_version}"
-    )
+    await update.message.reply_text(f"Readeckbot version: {__version__}\n{readeck_version}")
+
 
 async def restart_command(update: Update, context: CallbackContext) -> None:
     """Restart the bot process (systemd will relaunch it, useful for upgrades). Only admins can use this."""
