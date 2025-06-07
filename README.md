@@ -9,6 +9,8 @@ Features:
 - /md_<id> return the raw markdown
 - /list  . unread articles
 - /epub generate an epub with the unread articles
+- /version show the current bot version
+- /restart restart the bot process (for upgrades, requires systemd or similar process manager)
 
 
 ## Setup a development environment
@@ -92,47 +94,10 @@ that’s it!
 
 You can now start chatting with your bot on Telegram using your own token.
 
+### Special commands for bot management
+
+- `/version` — Replies with the current version of the bot (from the code).
+- `/restart` — Restarts the bot process. This is useful for upgrades: if you run the bot under `systemd` (or similar), it will be relaunched and pick up the latest version (for example, if you use `uvx` to always run the latest code).  
+  **Note:** You may want to restrict this command to admin users in production.
 
 Happy hacking and happy reading! 📚🤖
-
-## Architecture
-
-
-```mermaid
-    flowchart TD
-        %% External Entities
-        A["Telegram Users"]:::external
-        B["Telegram Platform"]:::external
-        F["Readeck Server (127.0.0.1:8000)"]:::external
-
-        %% Internal Bot Components
-        C["Telegram Bot API Interface"]:::internal
-        D["Command Handlers & Bot Logic"]:::internal
-        E["Readeck API Client"]:::internal
-
-        %% Configuration Component
-        G["Configuration (.env)"]:::config
-
-        %% Data Flow
-        A -->|"sends_message"| B
-        B -->|"forwards_command"| C
-        C -->|"dispatches_command"| D
-        D <-->|"processes_bookmark_requests"| E
-        E -->|"sends_HTTP_requests"| F
-        F -->|"returns_response"| E
-        G -->|"supplies_config"| C
-        G -->|"supplies_config"| D
-
-        %% Click Events
-        click C "https://github.com/mgaitan/readeckbot/blob/main/readeckbot/main.py"
-        click D "https://github.com/mgaitan/readeckbot/tree/main/readeckbot/"
-        click E "https://github.com/mgaitan/readeckbot/blob/main/readeckbot/requests.py"
-
-        %% Styles
-        classDef external fill:#f4cccc,stroke:#cc0000,stroke-width:2px;
-        classDef internal fill:#d9ead3,stroke:#0b8043,stroke-width:2px;
-        classDef config fill:#cfe2f3,stroke:#1155cc,stroke-width:2px;
-```
-
-
-(done with [gitdiagram](https://gitdiagram.com/mgaitan/readeckbot))

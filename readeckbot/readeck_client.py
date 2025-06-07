@@ -1,8 +1,38 @@
 from typing import Any
 from io import BytesIO
+import subprocess
 
 from .config import READECK_BASE_URL
 from . import requests
+
+
+def get_readeck_version() -> str:
+    """
+    Returns the version string of the installed readeck binary.
+    """
+    try:
+        result = subprocess.run(["readeck", "version"], capture_output=True, text=True, check=True)
+        # Expected output: "readeck version: 0.19.2"
+        return result.stdout.strip()
+    except Exception as e:
+        return f"Could not determine readeck version: {e}"
+
+
+async def is_admin_user(token: str) -> bool:
+    """
+    Checks if the user associated with the given token is an admin in Readeck.
+    """
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "accept": "application/json",
+    }
+    try:
+        resp = await requests.get(f"{READECK_BASE_URL}/api/profile", headers=headers)
+        data = await resp.json()
+        roles = data.get("provider", {}).get("roles", [])
+        return "admin" in roles
+    except Exception:
+        return False
 
 
 async def fetch_bookmarks(
