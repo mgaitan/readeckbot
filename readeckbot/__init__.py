@@ -10,4 +10,4 @@ Features:
 - Uses a persistent dictionary (JSON file) to store user tokens.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
