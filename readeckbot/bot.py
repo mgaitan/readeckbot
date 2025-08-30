@@ -440,7 +440,9 @@ async def favorite_bookmark_handler(update: Update, context: CallbackContext) ->
     try:
         await query.edit_message_reply_markup(reply_markup=reply_markup)
     except Exception as e:
-        logger.error(f"Failed to update inline keyboard: {e}")
+        # Ignore "Message is not modified" error, log others
+        if "Message is not modified" not in str(e):
+            logger.error(f"Failed to update inline keyboard: {e}")
 
 
 async def epub_handler(update: Update, context: CallbackContext) -> None:
