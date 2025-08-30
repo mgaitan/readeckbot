@@ -238,8 +238,10 @@ def build_inline_keyboard(bookmark_id, is_favorite, show_read=True, show_publish
 
     # Compose keyboard rows
     keyboard = []
-    if row1: keyboard.append(row1)
-    if row2: keyboard.append(row2)
+    if row1:
+        keyboard.append(row1)
+    if row2:
+        keyboard.append(row2)
     if row_archive:
         keyboard.append(row_archive)
     return InlineKeyboardMarkup(keyboard)
