@@ -258,7 +258,7 @@ async def reply_details(message: Message, token: str, bookmark_id: str):
     logger.info(info)
     title = info.get("title") or info.get("url")
     url = info.get("url")
-    is_favorite = info.get("is_favorite", False)
+    is_favorite = info.get("is_marked", False)
     reply_markup = build_inline_keyboard(
         bookmark_id,
         is_favorite,
@@ -361,7 +361,7 @@ async def read_handler(update: Update, context: CallbackContext) -> None:
         details = await requests.get(f"{config.READECK_BASE_URL}/api/bookmarks/{bookmark_id}", headers=headers)
         details.raise_for_status()
         info = details.json()
-        is_favorite = info.get("is_favorite", False)
+        is_favorite = info.get("is_marked", False)
         reply_markup = build_inline_keyboard(
             bookmark_id,
             is_favorite,
@@ -423,7 +423,7 @@ async def favorite_bookmark_handler(update: Update, context: CallbackContext) ->
     details.raise_for_status()
     info = details.json()
     logger.info(f"[favorite_bookmark_handler] Bookmark info after toggle: {info}")
-    is_favorite = info.get("is_favorite", False)
+    is_favorite = info.get("is_marked", False)
 
     # Try to detect context (detail or end-of-article) by inspecting the message text/buttons if needed
     # For simplicity, always show all actions except in the end-of-article case (where only archive+fav are shown)

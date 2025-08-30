@@ -140,7 +140,7 @@ async def favorite_bookmark(bookmark_id: str, token: str):
         "content-type": "application/json",
     }
     patch_url = f"{READECK_BASE_URL}/api/bookmarks/{bookmark_id}"
-    payload = {"is_favorite": True}
+    payload = {"is_marked": True}
     response = await requests.patch(patch_url, headers=headers, json=payload)
     response.raise_for_status()
     return True
@@ -151,7 +151,7 @@ async def unfavorite_bookmark(bookmark_id: str, token: str):
         "content-type": "application/json",
     }
     patch_url = f"{READECK_BASE_URL}/api/bookmarks/{bookmark_id}"
-    payload = {"is_favorite": False}
+    payload = {"is_marked": False}
     response = await requests.patch(patch_url, headers=headers, json=payload)
     response.raise_for_status()
     return True
