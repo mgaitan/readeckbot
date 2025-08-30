@@ -394,20 +394,14 @@ async def favorite_bookmark_handler(update: Update, context: CallbackContext) ->
     user_id = update.effective_user.id
     token = config.USER_TOKEN_MAP.get(str(user_id))
     query = update.callback_query
-    logger.info(f"[favorite_bookmark_handler] Callback data: {query.data}")
     await query.answer()
 
     data = query.data  # 'favorite_<id>' or 'unfavorite_<id>'
     action, bookmark_id = data.split("_", 1)
-    logger.info(f"[favorite_bookmark_handler] Action: {action}, Bookmark ID: {bookmark_id}")
     if action == "favorite":
-        logger.info(f"[favorite_bookmark_handler] Calling favorite_bookmark for {bookmark_id}")
-        result = await favorite_bookmark(bookmark_id, token)
-        logger.info(f"[favorite_bookmark_handler] favorite_bookmark result: {result}")
+        await favorite_bookmark(bookmark_id, token)
     else:
-        logger.info(f"[favorite_bookmark_handler] Calling unfavorite_bookmark for {bookmark_id}")
-        result = await unfavorite_bookmark(bookmark_id, token)
-        logger.info(f"[favorite_bookmark_handler] unfavorite_bookmark result: {result}")
+        await unfavorite_bookmark(bookmark_id, token)
 
     # Fetch updated details to get new favorite state
     headers = {
@@ -415,14 +409,9 @@ async def favorite_bookmark_handler(update: Update, context: CallbackContext) ->
         "accept": "application/json",
         "content-type": "application/json",
     }
-    import asyncio
-    details = await requests.get(f"{config.READECK_BASE_URL}/api/bookmarks/{bookmark_id}", headers=headers)
-    logger.info(f"[favorite_bookmark_handler] Raw backend response: {details.text}")
-    await asyncio.sleep(0.2)
     details = await requests.get(f"{config.READECK_BASE_URL}/api/bookmarks/{bookmark_id}", headers=headers)
     details.raise_for_status()
     info = details.json()
-    logger.info(f"[favorite_bookmark_handler] Bookmark info after toggle: {info}")
     is_favorite = info.get("is_marked", False)
 
     # Try to detect context (detail or end-of-article) by inspecting the message text/buttons if needed
