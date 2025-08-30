@@ -26,6 +26,8 @@ from .readeck_client import (
     save_bookmark,
     fetch_article_markdown,
     archive_bookmark,
+    favorite_bookmark,
+    unfavorite_bookmark,
     get_readeck_version,
     is_admin_user,
 )
@@ -210,9 +212,51 @@ async def register_and_fetch_token(update: Update, username: str, password: str)
         logger.error("Token missing in auth response.")
 
 
+def build_inline_keyboard(
+    bookmark_id,
+    is_favorite,
+    show_read=True,
+    show_publish=True,
+    show_epub=True,
+    show_summarize=False,
+    show_archive=False,
+):
+    """Builds the inline keyboard for bookmark actions, including favorite toggle and optional actions."""
+    # Favorite toggle button (emoji only)
+    fav_emoji = "❤️" if is_favorite else "🤍"
+    fav_action = "unfavorite" if is_favorite else "favorite"
+    button_fav = InlineKeyboardButton(fav_emoji, callback_data=f"{fav_action}_{bookmark_id}")
+
+    buttons = []
+    if show_read:
+        buttons.append(InlineKeyboardButton("Read", callback_data=f"read_{bookmark_id}"))
+    if show_publish:
+        buttons.append(InlineKeyboardButton("Publish", callback_data=f"pub_{bookmark_id}"))
+    # Insert favorite button at the beginning of the first row
+    row1 = [button_fav] + buttons if buttons else [button_fav]
+
+    row2 = []
+    if show_epub:
+        row2.append(InlineKeyboardButton("Epub", callback_data=f"epub_{bookmark_id}"))
+    if show_summarize and llm:
+        row2.append(InlineKeyboardButton("Summarize", callback_data=f"summarize_{bookmark_id}"))
+    row2 = row2 if row2 else None
+
+    row_archive = [InlineKeyboardButton("Archive", callback_data=f"archive_{bookmark_id}")] if show_archive else None
+
+    # Compose keyboard rows
+    keyboard = []
+    if row1:
+        keyboard.append(row1)
+    if row2:
+        keyboard.append(row2)
+    if row_archive:
+        keyboard.append(row_archive)
+    return InlineKeyboardMarkup(keyboard)
+
+
 async def reply_details(message: Message, token: str, bookmark_id: str):
     """Reply with details about the saved bookmark. Include a keyboard of actions"""
-
     headers = {
         "Authorization": f"Bearer {token}",
         "accept": "application/json",
@@ -224,18 +268,16 @@ async def reply_details(message: Message, token: str, bookmark_id: str):
     logger.info(info)
     title = info.get("title") or info.get("url")
     url = info.get("url")
-
-    # Create an inline keyboard with actions pre-fills
-    button_read = InlineKeyboardButton("Read", callback_data=f"read_{bookmark_id}")
-    button_publish = InlineKeyboardButton("Publish", callback_data=f"pub_{bookmark_id}")
-    button_epub = InlineKeyboardButton("Epub", callback_data=f"epub_{bookmark_id}")
-
-    # Conditionally add summarize button
-    if llm:
-        button_summarize = InlineKeyboardButton("Summarize", callback_data=f"summarize_{bookmark_id}")
-        reply_markup = InlineKeyboardMarkup([[button_read, button_publish], [button_epub, button_summarize]])
-    else:
-        reply_markup = InlineKeyboardMarkup([[button_read, button_publish], [button_epub]])
+    is_favorite = info.get("is_marked", False)
+    reply_markup = build_inline_keyboard(
+        bookmark_id,
+        is_favorite,
+        show_read=True,
+        show_publish=True,
+        show_epub=True,
+        show_summarize=bool(llm),
+        show_archive=False,
+    )
     await message.reply_markdown_v2(f"[{escape_markdown_v2(title)}]({url})", reply_markup=reply_markup)
 
 
@@ -320,9 +362,25 @@ async def read_handler(update: Update, context: CallbackContext) -> None:
         button_read = InlineKeyboardButton("Next", callback_data=f"read_{bookmark_id}_{chunk_n + 1}")
         reply_markup = InlineKeyboardMarkup([[button_read]])
     else:
-        # Last chunk, no next button
-        button_archive = InlineKeyboardButton("Archive", callback_data=f"archive_{bookmark_id}")
-        reply_markup = InlineKeyboardMarkup([[button_archive]])
+        # Last chunk, show Archive and Favorite toggle buttons
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "accept": "application/json",
+            "content-type": "application/json",
+        }
+        details = await requests.get(f"{config.READECK_BASE_URL}/api/bookmarks/{bookmark_id}", headers=headers)
+        details.raise_for_status()
+        info = details.json()
+        is_favorite = info.get("is_marked", False)
+        reply_markup = build_inline_keyboard(
+            bookmark_id,
+            is_favorite,
+            show_read=False,
+            show_publish=False,
+            show_epub=False,
+            show_summarize=False,
+            show_archive=True,
+        )
 
     await query.message.reply_text(chunk, reply_markup=reply_markup)
 
@@ -332,14 +390,70 @@ async def archive_bookmark_handler(update: Update, context: CallbackContext) -> 
     user_id = update.effective_user.id
     token = config.USER_TOKEN_MAP.get(str(user_id))
     query = update.callback_query
-    query.answer()
+    await query.answer()
 
     # Bookmark_id issue here: getting the bookmark_id again
     data = query.data  # 'archive_PXNJqD7KvTUdVhwVDjuXSr'
     _, bookmark_id = data.split("_", 1)  # extract 'PXNJqD7KvTUdVhwVDjuXSr'
     await archive_bookmark(bookmark_id, token)
     logger.info(f"Archived bookmark {bookmark_id} succesfully.")
-    await query.message.reply_text("Bookmark archived", reply_to_message_id=query.message.message_id)
+    # Optionally update the inline keyboard to disable the archive button, but for now do nothing else.
+
+
+async def favorite_bookmark_handler(update: Update, context: CallbackContext) -> None:
+    """Toggle favorite status and update the inline keyboard (emoji only, toggle style)."""
+    user_id = update.effective_user.id
+    token = config.USER_TOKEN_MAP.get(str(user_id))
+    query = update.callback_query
+    await query.answer()
+
+    data = query.data  # 'favorite_<id>' or 'unfavorite_<id>'
+    action, bookmark_id = data.split("_", 1)
+    if action == "favorite":
+        await favorite_bookmark(bookmark_id, token)
+    else:
+        await unfavorite_bookmark(bookmark_id, token)
+
+    # Fetch updated details to get new favorite state
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "accept": "application/json",
+        "content-type": "application/json",
+    }
+    details = await requests.get(f"{config.READECK_BASE_URL}/api/bookmarks/{bookmark_id}", headers=headers)
+    details.raise_for_status()
+    info = details.json()
+    is_favorite = info.get("is_marked", False)
+
+    # Try to detect context (detail or end-of-article) by inspecting the message text/buttons if needed
+    # For simplicity, always show all actions except in the end-of-article case (where only archive+fav are shown)
+    # If only archive+fav are present, keep that layout
+
+    # Try to detect if the message has an Archive button (end-of-article)
+    current_markup = query.message.reply_markup
+    show_archive = False
+    if current_markup:
+        for row in current_markup.inline_keyboard:
+            for btn in row:
+                if btn.text == "Archive":
+                    show_archive = True
+
+    reply_markup = build_inline_keyboard(
+        bookmark_id,
+        is_favorite,
+        show_read=not show_archive,
+        show_publish=not show_archive,
+        show_epub=not show_archive,
+        show_summarize=not show_archive and bool(llm),
+        show_archive=show_archive,
+    )
+
+    try:
+        await query.edit_message_reply_markup(reply_markup=reply_markup)
+    except Exception as e:
+        # Ignore "Message is not modified" error, log others
+        if "Message is not modified" not in str(e):
+            logger.error(f"Failed to update inline keyboard: {e}")
 
 
 async def epub_handler(update: Update, context: CallbackContext) -> None:
@@ -528,6 +642,7 @@ def main():
     application.add_handler(CallbackQueryHandler(publish_handler, pattern=r"^pub_"))
     application.add_handler(CallbackQueryHandler(epub_handler, pattern=r"^epub_"))
     application.add_handler(CallbackQueryHandler(archive_bookmark_handler, pattern=r"^archive_"))
+    application.add_handler(CallbackQueryHandler(favorite_bookmark_handler, pattern=r"^(favorite|unfavorite)_"))
     if llm:
         application.add_handler(CallbackQueryHandler(summarize_handler, pattern=r"^summarize_"))
 

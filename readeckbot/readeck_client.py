@@ -135,6 +135,30 @@ async def archive_bookmark(bookmark_id: str, token: str):
     return True
 
 
+async def favorite_bookmark(bookmark_id: str, token: str):
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "content-type": "application/json",
+    }
+    patch_url = f"{READECK_BASE_URL}/api/bookmarks/{bookmark_id}"
+    payload = {"is_marked": True}
+    response = await requests.patch(patch_url, headers=headers, json=payload)
+    response.raise_for_status()
+    return True
+
+
+async def unfavorite_bookmark(bookmark_id: str, token: str):
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "content-type": "application/json",
+    }
+    patch_url = f"{READECK_BASE_URL}/api/bookmarks/{bookmark_id}"
+    payload = {"is_marked": False}
+    response = await requests.patch(patch_url, headers=headers, json=payload)
+    response.raise_for_status()
+    return True
+
+
 async def fetch_article_markdown(bookmark_id: str, token: str):
     """Fetch the markdown of a bookmark by its ID."""
     headers = {
