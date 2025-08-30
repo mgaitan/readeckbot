@@ -339,7 +339,7 @@ async def archive_bookmark_handler(update: Update, context: CallbackContext) -> 
     _, bookmark_id = data.split("_", 1)  # extract 'PXNJqD7KvTUdVhwVDjuXSr'
     await archive_bookmark(bookmark_id, token)
     logger.info(f"Archived bookmark {bookmark_id} succesfully.")
-    await query.message.reply_text("archived")
+    await query.message.reply_text("Bookmark archived", reply_to_message_id=query.message.message_id)
 
 
 async def epub_handler(update: Update, context: CallbackContext) -> None:
