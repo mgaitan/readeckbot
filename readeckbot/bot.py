@@ -415,6 +415,10 @@ async def favorite_bookmark_handler(update: Update, context: CallbackContext) ->
         "accept": "application/json",
         "content-type": "application/json",
     }
+    import asyncio
+    details = await requests.get(f"{config.READECK_BASE_URL}/api/bookmarks/{bookmark_id}", headers=headers)
+    logger.info(f"[favorite_bookmark_handler] Raw backend response: {details.text}")
+    await asyncio.sleep(0.2)
     details = await requests.get(f"{config.READECK_BASE_URL}/api/bookmarks/{bookmark_id}", headers=headers)
     details.raise_for_status()
     info = details.json()
