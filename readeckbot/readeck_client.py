@@ -134,6 +134,7 @@ async def archive_bookmark(bookmark_id: str, token: str):
     response.raise_for_status()
     return True
 
+
 async def favorite_bookmark(bookmark_id: str, token: str):
     headers = {
         "Authorization": f"Bearer {token}",
@@ -144,6 +145,7 @@ async def favorite_bookmark(bookmark_id: str, token: str):
     response = await requests.patch(patch_url, headers=headers, json=payload)
     response.raise_for_status()
     return True
+
 
 async def unfavorite_bookmark(bookmark_id: str, token: str):
     headers = {

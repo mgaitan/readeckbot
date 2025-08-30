@@ -212,7 +212,15 @@ async def register_and_fetch_token(update: Update, username: str, password: str)
         logger.error("Token missing in auth response.")
 
 
-def build_inline_keyboard(bookmark_id, is_favorite, show_read=True, show_publish=True, show_epub=True, show_summarize=False, show_archive=False):
+def build_inline_keyboard(
+    bookmark_id,
+    is_favorite,
+    show_read=True,
+    show_publish=True,
+    show_epub=True,
+    show_summarize=False,
+    show_archive=False,
+):
     """Builds the inline keyboard for bookmark actions, including favorite toggle and optional actions."""
     # Favorite toggle button (emoji only)
     fav_emoji = "❤️" if is_favorite else "🤍"
@@ -246,6 +254,7 @@ def build_inline_keyboard(bookmark_id, is_favorite, show_read=True, show_publish
         keyboard.append(row_archive)
     return InlineKeyboardMarkup(keyboard)
 
+
 async def reply_details(message: Message, token: str, bookmark_id: str):
     """Reply with details about the saved bookmark. Include a keyboard of actions"""
     headers = {
@@ -267,7 +276,7 @@ async def reply_details(message: Message, token: str, bookmark_id: str):
         show_publish=True,
         show_epub=True,
         show_summarize=bool(llm),
-        show_archive=False
+        show_archive=False,
     )
     await message.reply_markdown_v2(f"[{escape_markdown_v2(title)}]({url})", reply_markup=reply_markup)
 
@@ -370,7 +379,7 @@ async def read_handler(update: Update, context: CallbackContext) -> None:
             show_publish=False,
             show_epub=False,
             show_summarize=False,
-            show_archive=True
+            show_archive=True,
         )
 
     await query.message.reply_text(chunk, reply_markup=reply_markup)
@@ -389,6 +398,7 @@ async def archive_bookmark_handler(update: Update, context: CallbackContext) -> 
     await archive_bookmark(bookmark_id, token)
     logger.info(f"Archived bookmark {bookmark_id} succesfully.")
     # Optionally update the inline keyboard to disable the archive button, but for now do nothing else.
+
 
 async def favorite_bookmark_handler(update: Update, context: CallbackContext) -> None:
     """Toggle favorite status and update the inline keyboard (emoji only, toggle style)."""
@@ -435,7 +445,7 @@ async def favorite_bookmark_handler(update: Update, context: CallbackContext) ->
         show_publish=not show_archive,
         show_epub=not show_archive,
         show_summarize=not show_archive and bool(llm),
-        show_archive=show_archive
+        show_archive=show_archive,
     )
 
     try:
