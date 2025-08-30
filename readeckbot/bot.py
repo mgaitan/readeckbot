@@ -214,12 +214,18 @@ async def register_and_fetch_token(update: Update, username: str, password: str)
 
 def build_inline_keyboard(bookmark_id, is_favorite, show_read=True, show_publish=True, show_epub=True, show_summarize=False, show_archive=False):
     """Builds the inline keyboard for bookmark actions, including favorite toggle and optional actions."""
+    # Favorite toggle button (emoji only)
+    fav_emoji = "❤️" if is_favorite else "🤍"
+    fav_action = "unfavorite" if is_favorite else "favorite"
+    button_fav = InlineKeyboardButton(fav_emoji, callback_data=f"{fav_action}_{bookmark_id}")
+
     buttons = []
     if show_read:
         buttons.append(InlineKeyboardButton("Read", callback_data=f"read_{bookmark_id}"))
     if show_publish:
         buttons.append(InlineKeyboardButton("Publish", callback_data=f"pub_{bookmark_id}"))
-    row1 = buttons.copy() if buttons else None
+    # Insert favorite button at the beginning of the first row
+    row1 = [button_fav] + buttons if buttons else [button_fav]
 
     row2 = []
     if show_epub:
@@ -228,21 +234,14 @@ def build_inline_keyboard(bookmark_id, is_favorite, show_read=True, show_publish
         row2.append(InlineKeyboardButton("Summarize", callback_data=f"summarize_{bookmark_id}"))
     row2 = row2 if row2 else None
 
-    # Favorite toggle button (emoji only)
-    fav_emoji = "❤️" if is_favorite else "🤍"
-    fav_action = "unfavorite" if is_favorite else "favorite"
-    row_fav = [InlineKeyboardButton(fav_emoji, callback_data=f"{fav_action}_{bookmark_id}")]
-
     row_archive = [InlineKeyboardButton("Archive", callback_data=f"archive_{bookmark_id}")] if show_archive else None
 
     # Compose keyboard rows
     keyboard = []
     if row1: keyboard.append(row1)
     if row2: keyboard.append(row2)
-    if row_archive and row_fav:
-        keyboard.append(row_archive + row_fav)
-    else:
-        keyboard.append(row_fav)
+    if row_archive:
+        keyboard.append(row_archive)
     return InlineKeyboardMarkup(keyboard)
 
 async def reply_details(message: Message, token: str, bookmark_id: str):
